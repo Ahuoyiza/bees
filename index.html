@@ -209,10 +209,12 @@
     <p class="modal__emoji" aria-hidden="true">🐝💥</p>
     <h2 id="over-title" class="font-display text-xl">Ouch! Too many stings</h2>
     <p id="over-summary" class="text-md"></p>
+    <!-- Personal best (kept on this device forever) -->
+    <p id="over-best" class="font-display text-lg personal-best"></p>
 
     <!-- Shown only when the score makes the top 10 -->
     <form id="score-form" class="score-form stack text-left" hidden>
-      <p class="font-display text-lg text-center new-high">🏆 New high score!</p>
+      <p class="font-display text-lg text-center new-high">🏆 You made today's top 10!</p>
       <label for="player-name" class="label">Your name for the leaderboard</label>
       <div class="flex gap-2">
         <input
@@ -225,9 +227,9 @@
           placeholder="e.g. Honey Hunter"
           required
         />
-        <button class="btn btn--primary" type="submit">Save</button>
+        <button id="save-btn" class="btn btn--primary" type="submit">Save</button>
       </div>
-      <p class="text-xs text-soft">Saved on this device only. No account needed.</p>
+      <p id="score-note" class="text-xs text-soft">No account needed.</p>
     </form>
 
     <!-- The leaderboard appears here after saving -->
@@ -241,8 +243,17 @@
   <!-- Leaderboard (opened from the header) -->
   <dialog id="board-dialog" class="modal card stack text-center" aria-labelledby="board-title">
     <p class="modal__emoji" aria-hidden="true">🏆</p>
-    <h2 id="board-title" class="font-display text-xl">Leaderboard</h2>
-    <p class="text-sm text-soft">Top 10 honey collectors on this device</p>
+    <h2 id="board-title" class="font-display text-xl">Today's leaderboard</h2>
+    <p class="text-sm text-soft">
+      Top 10 honey collectors today. Resets at midnight UTC, <span id="board-reset"></span>.
+    </p>
+
+    <!-- The player's own best ever run, which never resets -->
+    <div class="personal-best-card flex items-center justify-between gap-3">
+      <span class="text-xs text-soft upper">Your best ever</span>
+      <span id="board-best" class="font-display text-lg"></span>
+    </div>
+
     <div id="board-list"></div>
     <div class="flex justify-center gap-3">
       <button id="board-close" class="btn btn--primary" type="button" data-default>Back to the meadow</button>

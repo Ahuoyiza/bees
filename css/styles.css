@@ -211,6 +211,13 @@ button {
   transform: translateY(-2px);
 }
 
+/* A button waiting on something (e.g. "Saving…") */
+.btn:disabled {
+  opacity: 0.7;
+  cursor: progress;
+  transform: none;
+}
+
 .btn--ghost {
   background: var(--color-paper);
   border: 2px solid #f3dfb4;
@@ -368,6 +375,22 @@ button {
 .board tr.is-new {
   background: #ffe7a8;
   font-weight: 800;
+}
+
+/* Personal best line on the game-over screen */
+.personal-best {
+  color: var(--color-honey-dark);
+}
+
+.personal-best:empty {
+  display: none;
+}
+
+/* "Your best ever" strip in the leaderboard dialog */
+.personal-best-card {
+  padding: var(--space-3) var(--space-4);
+  background: #ffe7a8;
+  border-radius: var(--radius-md);
 }
 
 .board-empty {

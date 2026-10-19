@@ -15,7 +15,11 @@ Built with plain **HTML, CSS and JavaScript**. There are no frameworks, no build
 5. Each level takes place in a new scene: **Sunny Meadow → Golden Sunset → Lavender Fields → Moonlit Garden → Cherry Blossom**, then the cycle repeats.
 6. Get stung **4 times** before your pot is full and the game is over.
 
-**Leaderboard:** when a game ends with a top-10 score, you're asked for a name. The **Leaderboard** button in the header shows the top 10 and pauses the game while it's open. Scores are saved in your browser on this device only, with no account or sign-in.
+**Leaderboard:** there are two kinds of score.
+- **Today's leaderboard** is online and shared by everyone who plays. It shows the top 10 runs of the day and **resets every day at midnight UTC**. If a game ends with a top-10 score, you're asked for a name. No account or sign-in is needed. If the game can't reach the server, the score is saved on your device instead.
+- **Your personal best** is your best run ever. It's kept on your device and **never resets**. The game-over screen tells you when you beat it.
+
+The **Leaderboard** button in the header shows both, plus how long until the next reset. The game pauses while it's open.
 
 **Full screen:** press the corner button at the top left of the meadow. Press it again or press `Esc` to leave. Where the browser blocks true full screen, as iPhone Safari does, the game fills the browser window instead.
 
@@ -56,8 +60,10 @@ bees/
 │   └── styles.css  # Design tokens, utility classes, components, scene and animations
 ├── js/
 │   ├── audio.js    # Cozy ambience and sound effects (Web Audio API)
-│   ├── leaderboard.js # Top-10 scores saved in localStorage
+│   ├── leaderboard.js # Online daily top 10 (Supabase) + personal best (localStorage)
 │   └── game.js     # Game state, bees, catching, stings, levels and the main loop
+├── supabase/
+│   └── schema.sql  # Online leaderboard setup: tables, security rules, game functions
 ├── .gitignore
 └── README.md
 ```
@@ -99,9 +105,16 @@ The sky, sun, clouds, hills and grass only use colour tokens such as `--color-sk
 - **`audio.js`** creates all sound with the **Web Audio API**: a warm chord pad, a random pentatonic music-box melody with echo, a faint bee hum and occasional bird chirps, plus sound effects for catching, stinging, levelling up and game over.
 
 ### Leaderboard
-- `leaderboard.js` stores the top 10 scores in `localStorage`, ranked by total honey and then by level. It also remembers the last name you typed.
+- `leaderboard.js` talks to **Supabase** with plain `fetch` calls, so there's no extra library.
+  - When a game starts, it calls `start_run()` to get a run id.
+  - On every catch, it calls `record_catch()`. Catches are queued and spaced about 0.45 seconds apart, so the server's speed check never drops a real catch.
+  - At game over, it waits for the queue to finish, then calls `finish_run()` with the player's name. **The server writes its own honey count**, not a number from the browser.
+  - It reads the board with `todays_leaderboard()`.
+- The Supabase **publishable key** in `leaderboard.js` is meant to be public. It can only read the board and call the game functions, because the database blocks everything else.
+- **Offline fallback:** if Supabase can't be reached, today's board is kept in `localStorage` instead, ranked by honey and then level. It also remembers the last name you typed.
+- Your personal best is stored separately under `bees-personal-best`. It only changes when a run beats it.
 - Names are always inserted with `textContent`, so a name can't inject HTML into the page.
-- Every leaderboard function is `async`. To move to a shared online leaderboard later, for example with Supabase, only `leaderboard.js` needs to change.
+- `supabase/schema.sql` sets up the database. Paste it into the Supabase SQL Editor and click Run. The server counts honey itself from each catch, rejects impossible play, and only accepts writes through its own functions. `todays_leaderboard()` returns today's top 10 using the same midnight-UTC reset.
 
 ### Full screen
 The HUD and meadow sit inside `#play-area`. The button asks the browser's Fullscreen API to make that element full screen, using the `webkit` versions where needed. Some browsers refuse, never answer, or say yes without actually going full screen. In those cases the game uses a **fallback**: it pins the play area over the whole window with `position: fixed`. Both modes add the `.is-fullscreen` class, and a CSS grid then puts the HUD on top and lets the meadow fill the rest. Dialogs still appear on top, because they open in the browser's top layer.

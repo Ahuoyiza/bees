@@ -77,13 +77,18 @@ const levelDialog = $('level-dialog');
 const overDialog = $('over-dialog');
 const levelSummary = $('level-summary');
 const overSummary = $('over-summary');
+const overBest = $('over-best');
 const soundToggle = $('sound-toggle');
 
 const scoreForm = $('score-form');
 const playerName = $('player-name');
+const saveBtn = $('save-btn');
+const scoreNote = $('score-note');
 const overBoard = $('over-board');
 const boardDialog = $('board-dialog');
 const boardList = $('board-list');
+const boardReset = $('board-reset');
+const boardBest = $('board-best');
 
 const playArea = $('play-area');
 const fullscreenBtn = $('fullscreen-btn');
@@ -401,6 +406,7 @@ function catchBee(bee) {
 
   state.honey += 1;
   state.totalHoney += 1;
+  Leaderboard.recordCatch(); // the server keeps its own count for the online board
   updateHoney();
   replayClass(potEl, 'is-filling');
 
@@ -454,6 +460,9 @@ function startLevel(level) {
   state.stingCooldown = 1.5; // a short grace period at the start
   [...state.bees].forEach(removeBee);
 
+  // Level 1 means a brand new game: start a new run on the server
+  if (level === 1) Leaderboard.startRun();
+
   applyScene(level);
   updateLevel();
   updateHoney();
@@ -480,23 +489,31 @@ async function gameOver() {
   state.running = false;
   BeeAudio.gameOver();
 
-  // Remember the best level reached on this device (storage may be blocked)
-  let best = state.level;
-  try {
-    best = Math.max(best, Number(localStorage.getItem('bees-best-level')) || 0);
-    localStorage.setItem('bees-best-level', String(best));
-  } catch (error) {
-    /* storage unavailable: ignore */
-  }
-
   overSummary.textContent =
-    `You reached level ${state.level} and collected ${state.totalHoney} honey in total. ` +
-    `Best level: ${best}.`;
+    `You reached level ${state.level} and collected ${state.totalHoney} honey in total.`;
+
+  // Personal best lives on this device and never resets
+  const { isNew, best } = Leaderboard.savePersonalBest({
+    honey: state.totalHoney,
+    level: state.level,
+  });
+  if (isNew) {
+    overBest.textContent = '🌟 New personal best!';
+  } else if (best) {
+    overBest.textContent = `Your personal best: ${describeRun(best)}`;
+  } else {
+    overBest.textContent = '';
+  }
 
   // Leaderboard: if this run makes the top 10, ask for a name
   overBoard.hidden = true;
   scoreForm.hidden = !(await Leaderboard.qualifies(state.totalHoney));
-  if (!scoreForm.hidden) playerName.value = Leaderboard.getSavedName();
+  if (!scoreForm.hidden) {
+    playerName.value = Leaderboard.getSavedName();
+    scoreNote.textContent = (await Leaderboard.isOnline())
+      ? 'Your score goes on today\'s leaderboard for everyone. No account needed.'
+      : 'Offline right now, so this is saved on this device only.';
+  }
 
   // The dialog focuses its first control: the name box if shown, otherwise "Try again"
   setTimeout(() => overDialog.showModal(), 450);
@@ -504,6 +521,18 @@ async function gameOver() {
 
 /* ---------- LEADERBOARD ---------- */
 const MEDALS = ['🥇', '🥈', '🥉'];
+
+// "23 honey, level 4"
+function describeRun(run) {
+  return `${run.honey} honey, level ${run.level}`;
+}
+
+// "in 5h 12m" until the daily reset
+function describeTimeUntilReset() {
+  const minutes = Math.max(1, Math.ceil(Leaderboard.msUntilReset() / 60000));
+  const hours = Math.floor(minutes / 60);
+  return hours ? `in ${hours}h ${minutes % 60}m` : `in ${minutes}m`;
+}
 
 // Draw the top 10 as a table inside `container`, highlighting one entry if given
 async function renderBoard(container, highlightId = null) {
@@ -513,7 +542,7 @@ async function renderBoard(container, highlightId = null) {
   if (!scores.length) {
     const empty = document.createElement('p');
     empty.className = 'board-empty text-sm text-soft';
-    empty.textContent = 'No scores yet. Catch some bees and be the first!';
+    empty.textContent = 'No scores yet today. Catch some bees and be the first!';
     container.appendChild(empty);
     return;
   }
@@ -521,7 +550,7 @@ async function renderBoard(container, highlightId = null) {
   const table = document.createElement('table');
   table.className = 'board';
   table.innerHTML = `
-    <caption class="visually-hidden">Top ${Leaderboard.MAX_ENTRIES} scores on this device</caption>
+    <caption class="visually-hidden">Today's top ${Leaderboard.MAX_ENTRIES} scores</caption>
     <thead>
       <tr>
         <th scope="col">Rank</th>
@@ -762,11 +791,17 @@ $('restart-btn').addEventListener('click', () => {
 scoreForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   Leaderboard.setSavedName(playerName.value);
+
+  // Saving can take a moment online (the last catches are still being sent)
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving…';
   const id = await Leaderboard.add({
     name: playerName.value,
     honey: state.totalHoney,
     level: state.level,
   });
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save';
 
   scoreForm.hidden = true;
   await renderBoard(overBoard, id);
@@ -778,6 +813,9 @@ scoreForm.addEventListener('submit', async (event) => {
 // Leaderboard button in the header: pause the game while it's open
 $('board-btn').addEventListener('click', async () => {
   state.paused = true;
+  const best = Leaderboard.getPersonalBest();
+  boardBest.textContent = best ? describeRun(best) : 'Play a game to set one!';
+  boardReset.textContent = describeTimeUntilReset();
   await renderBoard(boardList);
   boardDialog.showModal();
 });
