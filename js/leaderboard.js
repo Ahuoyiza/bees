@@ -34,7 +34,7 @@ const Leaderboard = (() => {
   const MAX_NAME_LENGTH = 16;
 
   /* ---------- Online run state ---------- */
-  let runPromise = Promise.resolve(null); // resolves to the server's run id (or null if offline)
+  let runPromise = Promise.resolve(null); // resolves to { id, seed } from the server (or null if offline)
   let catchQueue = Promise.resolve();     // catches are sent one after another, in order
   let lastCatchAnswered = 0;              // when the server last answered a catch
 
@@ -127,10 +127,14 @@ const Leaderboard = (() => {
   return {
     MAX_ENTRIES,
 
-    // A new game begins: ask the server for a run id (null if offline)
+    // A new game begins: ask the server for a run. Resolves to { id, seed },
+    // or null if offline. The seed decides which levels are sweet or swarm.
     startRun() {
       catchQueue = Promise.resolve();
-      runPromise = rpc('start_run').catch(() => null);
+      runPromise = rpc('start_run')
+        // Older database setups returned just the id, so accept both shapes
+        .then((run) => (typeof run === 'string' ? { id: run, seed: null } : run))
+        .catch(() => null);
       return runPromise;
     },
 
@@ -139,12 +143,12 @@ const Leaderboard = (() => {
     recordCatch() {
       const run = runPromise;
       catchQueue = catchQueue.then(async () => {
-        const runId = await run;
-        if (!runId) return;
+        const current = await run;
+        if (!current) return;
         const delay = lastCatchAnswered + CATCH_SPACING_MS - Date.now();
         if (delay > 0) await wait(delay);
         try {
-          await rpc('record_catch', { p_run_id: runId });
+          await rpc('record_catch', { p_run_id: current.id });
         } catch (error) {
           /* a lost catch only lowers the online score; the game carries on */
         }
@@ -189,11 +193,11 @@ const Leaderboard = (() => {
     // Online, the server uses its own honey count; `honey` and `level` are only
     // used for the offline fallback.
     async add({ name, honey, level }) {
-      const runId = await runPromise;
-      if (runId) {
+      const run = await runPromise;
+      if (run) {
         try {
           await catchQueue; // make sure every catch has reached the server first
-          await rpc('finish_run', { p_run_id: runId, p_name: cleanName(name) });
+          await rpc('finish_run', { p_run_id: run.id, p_name: cleanName(name) });
           runPromise = Promise.resolve(null); // this run is closed
 
           // Find the entry we just made: newest one today with this name

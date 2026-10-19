@@ -12,8 +12,21 @@ Built with plain **HTML, CSS and JavaScript**. There are no frameworks, no build
 2. **Click a bee** to catch it. Each bee adds one honey to your pot.
 3. Fill the pot (the target appears next to it) to finish the level. Each new level needs more bees, and the bees fly faster and sting more often.
 4. A bee that **turns red** is about to dive at your net. Catch it first or move your net away.
-5. Each level takes place in a new scene: **Sunny Meadow → Golden Sunset → Lavender Fields → Moonlit Garden → Cherry Blossom**, then the cycle repeats.
-6. Get stung **4 times** before your pot is full and the game is over.
+5. **Every 10 levels a new chapter begins**, with a new bee, new flowers and a new challenge. Every game starts at level 1. The **Chapters** button opens a **journey map**: a winding path of level stops that climbs from level 1 at the bottom through each chapter's own little world. Your bee hovers over the furthest level you've reached, finished stops are honey-gold with a tick, and locked ones are greyed with a padlock.
+
+   | Chapter | Levels | Bee | Flowers | Challenge |
+   |---|---|---|---|---|
+   | 1. The Meadow | 1–10 | Honeybee | Daisies | Angry bees turn red and dive at your net |
+   | 2. The Queen's Garden | 11–20 | Bumblebee | Tulips | The queen flies over and sends 3–4 soldier bees after your net. Dodge them, or catch the queen first |
+   | 3. Sunflower Fields | 21–30 | Carpenter bee | Sunflowers | Wasp decoys: clicking a wasp gets you stung |
+   | 4. Moonlit Grove | 31–40 | Glow bee | Bluebells | Darkness: only a lantern around your net lights the meadow |
+   | Endless Meadow | 41+ | Every kind | Every kind | All the challenges mixed, until you're stung out |
+
+   The sky also changes each level (sunny, sunset, lavender, blossom, and night in chapter 4).
+6. **How many bees each level needs:** levels 1–10 ramp up from 5 to 23. From level 11, most levels need **25**, but some are random surprises:
+   - 🍯 **Sweet levels** need only 12–15 bees.
+   - 🐝 **Swarm levels** need 30, with extra bees in the air. Two swarm levels never come in a row, and every new chapter starts on a normal level.
+7. Get stung **4 times** before your pot is full and the game is over.
 
 **Leaderboard:** there are two kinds of score.
 - **Today's leaderboard** is online and shared by everyone who plays. It shows the top 10 runs of the day and **resets every day at midnight UTC**. If a game ends with a top-10 score, you're asked for a name. No account or sign-in is needed. If the game can't reach the server, the score is saved on your device instead.
@@ -61,6 +74,8 @@ bees/
 ├── js/
 │   ├── audio.js    # Cozy ambience and sound effects (Web Audio API)
 │   ├── leaderboard.js # Online daily top 10 (Supabase) + personal best (localStorage)
+│   ├── chapters.js # Chapters, level plans (sweet/normal/swarm), scenes, bee & flower art
+│   ├── icons.js    # Every UI icon as honey-style inline SVG (no emoji)
 │   └── game.js     # Game state, bees, catching, stings, levels and the main loop
 ├── supabase/
 │   └── schema.sql  # Online leaderboard setup: tables, security rules, game functions
@@ -94,7 +109,16 @@ The scene is built from flat layers (sky, sun, drifting clouds, two hill layers 
 - `z-index` follows depth, so nearer flowers and bees overlap farther ones.
 
 ### Scenes per level
-The sky, sun, clouds, hills and grass only use colour tokens such as `--color-sky-top` and `--color-hill-front`. Each scene is a `.game[data-scene="…"]` rule in the CSS that gives those tokens new values. In `game.js`, the `SCENES` list holds each scene's name and flower colours. When a level starts, `applyScene()` sets `data-scene`, replants the flowers in the new colours and fades the new scene in. The night scene adds twinkling stars and a moon, and the blossom scene adds falling petals.
+The sky, sun, clouds, hills and grass only use colour tokens such as `--color-sky-top` and `--color-hill-front`. Each scene is a `.game[data-scene="…"]` rule in the CSS that gives those tokens new values. When a level starts, `applyScene()` sets `data-scene`, replants the chapter's flowers in the scene's colours and fades the new scene in. The night scene adds twinkling stars and a moon, and the blossom scene adds falling petals.
+
+### Chapters
+- **`chapters.js` holds all the content**, kept separate from the game logic: the chapter list (levels, bee, flowers, challenge, description), the SVG art for every bee and flower, the scenes, and the level plan.
+- **Level plan:** `levelPlan(seed, level)` decides whether a level is sweet, normal or swarm. It uses a small repeatable "random" formula, so the same seed always gives the same plan.
+- **Server check:** each online game gets its seed from the server. `level_for_honey()` in `supabase/schema.sql` runs the same formula to work out which level a score really reached. If you change the level rules, change both.
+- **Insects in `game.js`:** each insect has a `role` (`bee`, `wasp`, `queen` or `soldier`) and a `mode` (`fly`, `warn`, `dive`, `chase`, `leave` or `caught`). Each role has its own movement function.
+- **Darkness:** a dark layer with a radial-gradient "hole" that follows the net. Insects fade the further they are from the lantern.
+- **Journey map:** `renderJourney()` lays out every level stop with `bottom` (px) and `left` (%), snaking left and right along a sine wave. One stretched SVG path runs through the same points: solid honey up to your furthest level, dashed after it. Each chapter gets a themed background band, a signpost and a few of its flowers. Your furthest level is saved in `localStorage`, and the map scrolls to it when it opens. Locked chapters show only a silhouette of their bee.
+- **Icons:** every icon in the game is a small inline SVG from `icons.js`, drawn in the honey style. There's no emoji, so icons look the same on every device. In the HTML, `<span data-icon="trophy">` is filled at start-up by `Icons.fill()`. In code, `Icons.svg('crown')`, `Icons.medal(1)` and `Icons.withText(el, 'honey', 'Sweet level')` build icons. Icons are decorative (`aria-hidden`); the text beside them, or an `aria-label`, carries the meaning.
 
 ### JavaScript
 - **`game.js`** runs a `requestAnimationFrame` loop. Each bee moves through a simple set of states:

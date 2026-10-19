@@ -1,15 +1,17 @@
 /* =========================================================
    BEES — game.js
+   The game logic. Chapter content (bees, flowers, level plans)
+   lives in chapters.js.
    Sections:
    1. Settings
    2. Game state
    3. DOM references
    4. Small helpers
    5. Scene building (flowers)
-   6. Bees: create, move, draw
+   6. Bees, wasps, the queen and her soldiers: create, move, draw
    7. Player actions: catching & getting stung
-   8. Level flow (start, complete, game over)
-      + Leaderboard table and full screen helpers
+   8. Level flow (new game, levels, chapters, game over)
+      + Chapters journey map, leaderboard table and full screen helpers
    9. HUD updates
    10. Main game loop
    11. Event listeners & start-up
@@ -22,38 +24,45 @@ const CONFIG = {
   MAX_STINGS: 4,          // stings allowed before game over
   HORIZON: 0.42,          // must match --horizon in CSS (ground starts at 42% height)
   FLOWER_COUNT: 42,
-  STING_RADIUS: 160,      // bees closer than this (px) to the net may sting
+  STING_RADIUS: 160,      // bees closer than this (px) to the net may get angry
   WARN_TIME: 0.75,        // seconds a bee glows red before it dives
-  STING_COOLDOWN: 1.6,    // minimum seconds between two stings
+  STING_COOLDOWN: 1.6,    // minimum seconds between two angry bees
+  STING_GRACE: 1,         // seconds after a sting when you can't be stung again
   SPAWN_DELAY: 0.7,       // seconds between new bees appearing
+  WASP_SHARE: 0.3,        // in wasp chapters, about 3 in 10 new insects are wasps
+  QUEEN_EVERY: [14, 22],  // seconds between queen visits (random in this range)
+  QUEEN_FIRST: [6, 10],   // seconds before the first queen of a level
+  SOLDIER_TIME: 5,        // seconds soldiers chase the net before giving up
+  SOLDIER_HIT_RADIUS: 22, // how close a soldier must get to sting (px)
+  LANTERN_RADIUS: 150,    // size of the lit circle in dark levels (px)
 };
-
-// Difficulty grows a little every level
-function levelSettings(level) {
-  return {
-    target: 5 + (level - 1) * 2,           // bees needed to fill the pot
-    beeCount: Math.min(3 + level, 10),     // bees in the air at once
-    speed: 55 + level * 12,                // flying speed in px per second
-    stingRate: 0.05 + level * 0.035,       // chance per second a nearby bee gets angry
-  };
-}
 
 /* ---------- 2. GAME STATE ---------- */
 const state = {
   level: 1,
+  chapter: Chapters.chapterForLevel(1),
+  plan: null,             // { type: 'ramp' | 'sweet' | 'normal' | 'swarm', target }
+  settings: null,         // speed, bee count etc. for this level
+  seed: 0,                // decides which levels are sweet / swarm (picked by the server)
+  gameId: 0,              // changes every new game, so late server replies are ignored
+  dark: false,
   honey: 0,
   totalHoney: 0,
   stings: 0,
   running: false,
-  paused: false,         // true while the leaderboard is open mid-game
-  settings: levelSettings(1),
-  bees: [],
+  paused: false,          // true while a menu (leaderboard, chapters) is open mid-game
+  bees: [],               // every flying insect: bees, wasps, the queen and soldiers
   nextBeeId: 0,
   spawnTimer: 0,
   stingCooldown: 0,
+  invulnerable: 0,
+  queenTimer: 0,
+  pendingLevel: null,     // level waiting behind the chapter intro screen
   lastTime: 0,
   pointer: { x: -999, y: -999, inside: false },
 };
+state.plan = Chapters.levelPlan(state.seed, 1);
+state.settings = Chapters.levelSettings(1, state.plan);
 
 /* ---------- 3. DOM REFERENCES ---------- */
 const $ = (id) => document.getElementById(id);
@@ -61,9 +70,12 @@ const gameEl = $('game');
 const fieldEl = $('field');
 const cursorEl = $('cursor');
 const flashEl = $('sting-flash');
+const darknessEl = $('darkness');
+const levelBanner = $('level-banner');
 const announcer = $('announcer');
 
 const levelValue = $('level-value');
+const levelType = $('level-type');
 const sceneName = $('scene-name');
 const honeyValue = $('honey-value');
 const honeyTarget = $('honey-target');
@@ -80,6 +92,9 @@ const overSummary = $('over-summary');
 const overBest = $('over-best');
 const soundToggle = $('sound-toggle');
 
+const chapterDialog = $('chapter-dialog');
+const chaptersDialog = $('chapters-dialog');
+
 const scoreForm = $('score-form');
 const playerName = $('player-name');
 const saveBtn = $('save-btn');
@@ -95,7 +110,7 @@ const fullscreenBtn = $('fullscreen-btn');
 
 /* ---------- 4. HELPERS ---------- */
 const rand = (min, max) => min + Math.random() * (max - min);
-const pick = (list) => list[Math.floor(Math.random() * list.length)];
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 // Size of the playing field (re-read each frame so resizing just works)
 function fieldSize() {
@@ -129,163 +144,219 @@ function replayClass(el, className) {
   el.classList.add(className);
 }
 
+// The furthest level reached on this device, used to unlock chapter cards
+function getFurthestLevel() {
+  try {
+    return Number(localStorage.getItem('bees-furthest-level')) || 1;
+  } catch (error) {
+    return 1;
+  }
+}
+
+function saveFurthestLevel(level) {
+  try {
+    if (level > getFurthestLevel()) localStorage.setItem('bees-furthest-level', String(level));
+  } catch (error) {
+    /* storage unavailable: ignore */
+  }
+}
+
 /* ---------- 5. SCENE BUILDING ---------- */
 
-/*
-  Scenes: each level uses the next scene in this list, looping back to the
-  start after the last one. `id` matches a [data-scene] theme in the CSS
-  (sky, hills and grass colours); `petals` sets the flower colours.
-*/
-const SCENES = [
-  { id: 'meadow',   name: 'Sunny Meadow',    petals: ['#ff9ec4', '#c9a7ff', '#ffb38a', '#ffffff', '#ff7f9e', '#9fd3ff'] },
-  { id: 'sunset',   name: 'Golden Sunset',   petals: ['#ff8a5c', '#ffc94d', '#ff6f61', '#ffe08a', '#f7a072'] },
-  { id: 'lavender', name: 'Lavender Fields', petals: ['#b79cf5', '#9a7ee6', '#d8c8ff', '#f3c4ff', '#ffffff'] },
-  { id: 'night',    name: 'Moonlit Garden',  petals: ['#cfe3ff', '#ffffff', '#b7f0e6', '#ffd1f0', '#a8c4ff'] },
-  { id: 'blossom',  name: 'Cherry Blossom',  petals: ['#ffb3cf', '#ff8fb8', '#ffd6e6', '#ffffff', '#f7a8c8'] },
-];
-
-function sceneForLevel(level) {
-  return SCENES[(level - 1) % SCENES.length];
-}
-
-// Builds the SVG markup for one cute flower
-function flowerSVG(petalCount) {
-  const cx = 20;
-  const cy = 22;
-  let petals = '';
-  for (let i = 0; i < petalCount; i++) {
-    const angle = (i / petalCount) * Math.PI * 2;
-    const px = cx + Math.cos(angle) * 8;
-    const py = cy + Math.sin(angle) * 8;
-    petals += `<circle class="flower__petal" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="7"/>`;
-  }
-  return `
-    <svg viewBox="0 0 40 90" focusable="false">
-      <path class="flower__stem" d="M20 90 Q16 60 20 26"/>
-      <path class="flower__leaf" d="M19 66 Q6 58 8 50 Q16 54 19 62 Z"/>
-      ${petals}
-      <circle class="flower__center" cx="${cx}" cy="${cy}" r="6"/>
-    </svg>`;
-}
-
-// Scatter flowers across the meadow; nearer flowers are bigger and drawn on top
-function buildFlowers(palette) {
+// Scatter the chapter's flowers across the meadow; nearer flowers are bigger and on top
+function buildFlowers(chapter, scene) {
   // Clear the old flowers first (bees live in the same layer, so only remove flowers)
   fieldEl.querySelectorAll('.flower').forEach((flower) => flower.remove());
 
   const fragment = document.createDocumentFragment();
   for (let i = 0; i < CONFIG.FLOWER_COUNT; i++) {
     const z = Math.random();
+    const { type, colour } = Chapters.flowerFor(chapter, scene);
     const flower = document.createElement('div');
-    flower.className = 'flower';
+    flower.className = `flower flower--${type}`;
     flower.setAttribute('aria-hidden', 'true');
     flower.style.setProperty('--x', `${rand(2, 98)}%`);
     flower.style.setProperty('--z', z.toFixed(3));
     flower.style.setProperty('--scale', (0.45 + z * 0.9).toFixed(2));
-    flower.style.setProperty('--petal', pick(palette));
+    flower.style.setProperty('--petal', colour);
     flower.style.setProperty('--sway', `${rand(3, 5.5).toFixed(1)}s`);
     flower.style.zIndex = Math.round(z * 100);
-    flower.innerHTML = flowerSVG(pick([5, 6, 7]));
+    flower.innerHTML = Chapters.flowerSVG(type);
     fragment.appendChild(flower);
   }
   fieldEl.appendChild(fragment);
 }
 
-// Switch the meadow to the scene for this level: new colours, new flowers, a soft fade
+// Switch the meadow to this level's sky and the chapter's flowers, with a soft fade
 function applyScene(level) {
-  const scene = sceneForLevel(level);
-  if (gameEl.dataset.scene !== scene.id || !fieldEl.querySelector('.flower')) {
+  const scene = Chapters.sceneForLevel(level);
+  const chapter = Chapters.chapterForLevel(level);
+  const look = `${chapter.number}-${scene.id}`;
+  // Endless levels mix flower types, so replant every level there
+  if (gameEl.dataset.look !== look || chapter.flower === 'mixed') {
+    gameEl.dataset.look = look;
     gameEl.dataset.scene = scene.id;
-    buildFlowers(scene.petals);
+    buildFlowers(chapter, scene);
     replayClass(gameEl, 'is-changing-scene');
   }
-  sceneName.textContent = scene.name;
+  sceneName.textContent = `Chapter ${chapter.number} · ${scene.name}`;
 }
 
-/* ---------- 6. BEES ---------- */
+/* ---------- 6. BEES, WASPS, THE QUEEN AND HER SOLDIERS ----------
+   Everything that flies is an "insect" object in state.bees with a `role`:
+     bee     → catch it for honey
+     wasp    → a decoy: clicking it stings you
+     queen   → catch her for honey; if she gets halfway she calls soldiers
+     soldier → chases your net; touching one stings you
+   Each insect also has a `mode` (what it's doing right now):
+     fly → warn → dive → leave, chase → leave, or caught */
 
-// The bee artwork, shared by every bee (faces right; flipped with --facing)
-const BEE_SVG = `
-  <svg class="bee__art" viewBox="0 0 64 56" aria-hidden="true" focusable="false">
-    <path class="bee__stinger" d="M11 32 L2 34.5 L11 37 Z"/>
-    <ellipse class="bee__wing bee__wing--back" cx="27" cy="13" rx="9" ry="13"/>
-    <ellipse class="bee__body" cx="32" cy="34" rx="22" ry="16"/>
-    <ellipse class="bee__stripe" cx="25" cy="34" rx="3.5" ry="15"/>
-    <ellipse class="bee__stripe" cx="36" cy="34" rx="3.5" ry="15.3"/>
-    <ellipse class="bee__wing bee__wing--front" cx="36" cy="14" rx="10" ry="14"/>
-    <path class="bee__antenna" d="M47 21 Q49 13 55 11"/>
-    <circle class="bee__antenna-tip" cx="55.5" cy="11" r="2.2"/>
-    <circle class="bee__eye" cx="46" cy="30" r="3"/>
-    <circle class="bee__shine" cx="47" cy="29" r="1"/>
-    <ellipse class="bee__blush" cx="47.5" cy="37" rx="3.5" ry="2"/>
-    <path class="bee__smile" d="M49 40.5 q2 2 4 -0.5"/>
-  </svg>`;
+// Build the element for any insect. Bees, wasps and the queen are buttons so
+// keyboard users can reach them; soldiers are decorative (they come to you).
+function createInsect({ role, kind, label }) {
+  const el = document.createElement(label ? 'button' : 'div');
+  if (label) {
+    el.type = 'button';
+    el.setAttribute('aria-label', label);
+  } else {
+    el.setAttribute('aria-hidden', 'true');
+  }
+  el.className = `bee bee--${kind}`;
+  el.innerHTML = Chapters.beeSVG(kind);
 
-// Choose a new random spot in the meadow for the bee to fly towards
+  const shadow = document.createElement('div');
+  shadow.className = 'bee-shadow';
+  shadow.setAttribute('aria-hidden', 'true');
+  fieldEl.append(shadow, el);
+
+  const insect = {
+    id: state.nextBeeId++,
+    role,
+    kind,
+    el,
+    shadow,
+    mode: 'fly',
+    x: 0,
+    z: 0.5,
+    baseAltitude: 120,
+    altitude: 0,
+    phase: rand(0, Math.PI * 2),
+    facing: 1,
+    size: 1,              // extra size on top of the depth scale (the queen is bigger)
+    timer: 0,
+    sx: 0, sy: 0, scale: 1, // last on-screen position & size
+  };
+
+  // Pointerdown (not click) so fast-moving bees still count when you tap them
+  el.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    updatePointer(event); // on touch screens, the net jumps to where you tapped
+    pressInsect(insect);
+  });
+  // Keyboard users: Enter / Space fire a click with detail 0
+  if (label) {
+    el.addEventListener('click', (event) => {
+      if (event.detail === 0) pressInsect(insect);
+    });
+  }
+
+  state.bees.push(insect);
+  return insect;
+}
+
+// Choose a new random spot in the meadow for a bee to fly towards
 function pickTarget(bee) {
   const { w } = fieldSize();
   bee.targetX = rand(40, w - 40);
   bee.targetZ = rand(0.05, 0.95);
 }
 
-// Create a bee (a focusable <button>) entering from the left or right edge
-function spawnBee() {
+// A bee or wasp enters from the left or right edge
+function spawnBee(role) {
   const { w } = fieldSize();
   const fromLeft = Math.random() < 0.5;
-
-  const el = document.createElement('button');
-  el.type = 'button';
-  el.className = 'bee';
-  el.setAttribute('aria-label', 'Bee. Press to catch');
-  el.innerHTML = BEE_SVG;
-
-  const shadow = document.createElement('div');
-  shadow.className = 'bee-shadow';
-  shadow.setAttribute('aria-hidden', 'true');
-
-  fieldEl.append(shadow, el);
-
-  const bee = {
-    id: state.nextBeeId++,
-    el,
-    shadow,
-    mode: 'fly',          // fly → warn → dive → leave, or caught
-    x: fromLeft ? -50 : w + 50,
-    z: rand(0.1, 0.9),
-    baseAltitude: rand(70, 170),
-    altitude: 0,
-    phase: rand(0, Math.PI * 2),
-    facing: fromLeft ? 1 : -1,
-    timer: 0,
-    sx: 0, sy: 0, scale: 1, // last on-screen position & size
-  };
+  const isWasp = role === 'wasp';
+  const bee = createInsect({
+    role,
+    kind: isWasp ? 'wasp' : Chapters.beeKindFor(state.chapter),
+    label: isWasp ? 'Wasp. Do not catch!' : 'Bee. Press to catch',
+  });
+  bee.x = fromLeft ? -50 : w + 50;
+  bee.z = rand(0.1, 0.9);
+  bee.baseAltitude = rand(70, 170);
+  bee.facing = fromLeft ? 1 : -1;
   pickTarget(bee);
-
-  // Pointerdown (not click) so fast-moving bees still count when you tap them
-  el.addEventListener('pointerdown', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    catchBee(bee);
-  });
-  // Keyboard users: Enter / Space fire a click with detail 0
-  el.addEventListener('click', (event) => {
-    if (event.detail === 0) catchBee(bee);
-  });
-
-  state.bees.push(bee);
 }
 
-// Remove a bee from the page and from our list
+// The queen glides across high up. Halfway-ish she stops and calls her soldiers.
+function spawnQueen() {
+  const { w } = fieldSize();
+  const fromLeft = Math.random() < 0.5;
+  const queen = createInsect({
+    role: 'queen',
+    kind: 'queen',
+    label: 'Queen bee. Catch her before she calls her soldiers!',
+  });
+  queen.x = fromLeft ? -70 : w + 70;
+  queen.z = 0.3;
+  queen.baseAltitude = 190;
+  queen.facing = fromLeft ? 1 : -1;
+  queen.size = 1.5;
+  queen.deployAt = rand(0.3, 0.7) * w;
+  queen.deployed = false;
+
+  BeeAudio.queen();
+  announce('The queen bee is here! Catch her before she calls her soldiers.');
+}
+
+// The queen sends 3 or 4 soldiers after the net
+function deploySoldiers(queen) {
+  const count = Math.random() < 0.5 ? 3 : 4;
+  for (let i = 0; i < count; i++) {
+    const soldier = createInsect({ role: 'soldier', kind: 'soldier' });
+    soldier.mode = 'chase';
+    soldier.timer = CONFIG.SOLDIER_TIME;
+    soldier.sx = queen.sx + rand(-25, 25);
+    soldier.sy = queen.sy + rand(-10, 25);
+    soldier.scale = queen.scale;
+    soldier.size = 0.8;
+    soldier.facing = queen.facing;
+    soldier.wobble = rand(0, Math.PI * 2);
+  }
+  BeeAudio.swarm();
+  announce(`The queen sent ${count} soldier bees. Dodge them!`);
+}
+
+// Remove an insect from the page and from our list
 function removeBee(bee) {
   bee.el.remove();
   bee.shadow.remove();
   state.bees = state.bees.filter((b) => b !== bee);
 }
 
-// Move one bee according to what it is currently doing
+// Move one insect according to its role and what it is doing
 function updateBee(bee, dt) {
-  const { speed } = state.settings;
   bee.phase += dt * 4;
+  if (bee.mode === 'caught') return; // just playing its CSS animation
+
+  // Anything leaving zooms up and off the top of the screen
+  if (bee.mode === 'leave') {
+    const { speed } = state.settings;
+    bee.sy -= speed * 3 * dt;
+    bee.sx += bee.facing * speed * 1.5 * dt;
+    if (bee.sy < -80) removeBee(bee);
+    return;
+  }
+
+  if (bee.role === 'queen') updateQueen(bee, dt);
+  else if (bee.role === 'soldier') updateSoldier(bee, dt);
+  else updateWanderer(bee, dt);
+}
+
+// Bees and wasps: wander the meadow; bees may get angry and dive at the net
+function updateWanderer(bee, dt) {
+  const { speed } = state.settings;
 
   switch (bee.mode) {
     // Wandering between random spots, bobbing up and down
@@ -301,7 +372,7 @@ function updateBee(bee, dt) {
         if (Math.abs(dx) > 4) bee.facing = dx < 0 ? -1 : 1;
       }
       bee.altitude = bee.baseAltitude + Math.sin(bee.phase) * 14;
-      maybeGetAngry(bee, dt);
+      if (bee.role === 'bee') maybeGetAngry(bee, dt);
       break;
     }
 
@@ -332,23 +403,86 @@ function updateBee(bee, dt) {
       break;
     }
 
-    // After stinging (or missing), zoom up and off the top of the screen
-    case 'leave': {
-      bee.sy -= speed * 3 * dt;
-      bee.sx += bee.facing * speed * 1.5 * dt;
-      if (bee.sy < -80) removeBee(bee);
-      break;
-    }
-
     default:
-      break; // 'caught' bees just play their CSS animation
+      break;
   }
 }
 
-// Draw a bee and its shadow at their current positions
+// The queen: glide across, pause to call soldiers, glide off
+function updateQueen(queen, dt) {
+  queen.altitude = queen.baseAltitude + Math.sin(queen.phase) * 10;
+
+  // Calling her soldiers: she hovers and glows for a moment first
+  if (queen.mode === 'warn') {
+    queen.timer -= dt;
+    if (queen.timer <= 0) {
+      queen.mode = 'fly';
+      queen.el.classList.remove('is-angry');
+      deploySoldiers(queen);
+    }
+    return;
+  }
+
+  const glide = Math.max(state.settings.speed * 0.5, 60);
+  queen.x += queen.facing * glide * dt;
+
+  const reachedMiddle = queen.facing > 0 ? queen.x >= queen.deployAt : queen.x <= queen.deployAt;
+  if (!queen.deployed && reachedMiddle) {
+    queen.deployed = true;
+    queen.mode = 'warn';
+    queen.timer = 1;
+    queen.el.classList.add('is-angry');
+    BeeAudio.warn();
+  }
+
+  const { w } = fieldSize();
+  if (queen.x < -90 || queen.x > w + 90) removeBee(queen);
+}
+
+// Soldiers buzz after the net for a few seconds, then give up and leave
+function updateSoldier(soldier, dt) {
+  soldier.timer -= dt;
+  if (soldier.timer <= 0) {
+    soldier.mode = 'leave';
+    return;
+  }
+
+  const p = state.pointer;
+  const { w, h } = fieldSize();
+  // Chase the net if it's in the meadow, otherwise drift about
+  const targetX = p.inside ? p.x : soldier.sx + Math.cos(soldier.wobble) * 60;
+  const targetY = p.inside ? p.y : soldier.sy + Math.sin(soldier.wobble) * 30;
+  const dx = targetX - soldier.sx;
+  const dy = targetY - soldier.sy;
+  const dist = Math.hypot(dx, dy) || 1;
+
+  // A sideways wiggle so they buzz around instead of flying in a straight line
+  const wiggle = Math.sin(soldier.phase * 2 + soldier.wobble) * 0.6;
+  const chaseSpeed = Math.min(state.settings.speed * 1.2, 170) + 30;
+  soldier.sx += ((dx - dy * wiggle) / dist) * chaseSpeed * dt;
+  soldier.sy += ((dy + dx * wiggle) / dist) * chaseSpeed * dt;
+  soldier.sx = clamp(soldier.sx, 0, w);
+  soldier.sy = clamp(soldier.sy, 0, h);
+  soldier.facing = dx < 0 ? -1 : 1;
+
+  if (p.inside && dist < CONFIG.SOLDIER_HIT_RADIUS) {
+    sting();
+    soldier.mode = 'leave';
+  }
+}
+
+// Where the lantern is in dark levels: the net, or the middle if there's no net
+function lanternPosition() {
+  const { w, h } = fieldSize();
+  return state.pointer.inside ? state.pointer : { x: w / 2, y: h * 0.6 };
+}
+
+// Draw an insect and its shadow at their current positions
 function drawBee(bee) {
-  // Wandering bees are positioned from their 3D-ish coordinates
-  if (bee.mode === 'fly' || bee.mode === 'warn') {
+  const depthLift = state.dark ? 160 : 0; // in the dark, insects sit above the darkness layer
+
+  // Wandering insects are positioned from their 3D-ish coordinates
+  if ((bee.mode === 'fly' || bee.mode === 'warn') && bee.role !== 'soldier') {
     const pos = project(bee.x, bee.z, bee.altitude);
     bee.sx = pos.x;
     bee.sy = pos.y;
@@ -358,16 +492,25 @@ function drawBee(bee) {
     bee.shadow.style.opacity = '1';
     bee.shadow.style.transform =
       `translate3d(${pos.x - 23}px, ${pos.groundY - 6}px, 0) scale(${shadowScale})`;
-    bee.el.style.zIndex = Math.round(bee.z * 100) + 1;
+    bee.el.style.zIndex = Math.round(bee.z * 100) + 1 + depthLift;
   } else {
-    // Diving / leaving bees fly in front of everything, without a shadow
+    // Diving, chasing and leaving insects fly in front of everything, without a shadow
     bee.shadow.style.opacity = '0';
-    bee.el.style.zIndex = 250;
+    bee.el.style.zIndex = 250 + depthLift;
+  }
+
+  // In the dark, insects far from the lantern fade to a faint glow
+  if (state.dark && bee.mode !== 'caught') {
+    const lantern = lanternPosition();
+    const distance = Math.hypot(bee.sx - lantern.x, bee.sy - lantern.y);
+    bee.el.style.opacity = clamp(1.15 - distance / 260, 0.18, 1).toFixed(2);
+  } else {
+    bee.el.style.opacity = '';
   }
 
   bee.el.style.setProperty('--facing', bee.facing);
   bee.el.style.transform =
-    `translate3d(${bee.sx - 32}px, ${bee.sy - 28}px, 0) scale(${bee.scale})`;
+    `translate3d(${bee.sx - 32}px, ${bee.sy - 28}px, 0) scale(${bee.scale * bee.size})`;
 }
 
 /* ---------- 7. PLAYER ACTIONS ---------- */
@@ -388,9 +531,26 @@ function maybeGetAngry(bee, dt) {
   }
 }
 
-// The player caught a bee
+// The player clicked / tapped / pressed Enter on an insect
+function pressInsect(insect) {
+  if (!state.running || state.paused) return;
+  if (insect.mode === 'caught' || insect.mode === 'leave') return;
+
+  if (insect.role === 'wasp') {
+    showFloatText('Wasp!', insect.sx, insect.sy - 20, 'burst');
+    insect.mode = 'leave';
+    sting();
+  } else if (insect.role === 'soldier') {
+    insect.mode = 'leave';
+    sting();
+  } else {
+    catchBee(insect);
+  }
+}
+
+// The player caught a bee (or the queen)
 function catchBee(bee) {
-  if (!state.running || state.paused || bee.mode === 'caught' || bee.mode === 'leave') return;
+  const queenEarly = bee.role === 'queen' && bee.mode !== 'warn' && !bee.deployed;
 
   bee.mode = 'caught';
   bee.el.classList.remove('is-angry');
@@ -400,7 +560,8 @@ function catchBee(bee) {
   bee.shadow.style.opacity = '0';
   setTimeout(() => removeBee(bee), 460);
 
-  showFloatText('+1 🍯', bee.sx, bee.sy - 20);
+  if (queenEarly) showFloatText('Queen caught!', bee.sx, bee.sy - 20, 'crown');
+  else showFloatText('+1', bee.sx, bee.sy - 20, 'drop');
   replayClass(cursorEl, 'is-swinging');
   BeeAudio.catch();
 
@@ -412,6 +573,8 @@ function catchBee(bee) {
 
   if (state.honey >= state.settings.target) {
     completeLevel();
+  } else if (queenEarly) {
+    announce(`You caught the queen! No soldiers this time. ${state.honey} of ${state.settings.target}.`);
   } else {
     announce(`Caught a bee! ${state.honey} of ${state.settings.target}.`);
   }
@@ -419,7 +582,8 @@ function catchBee(bee) {
 
 // The player got stung
 function sting() {
-  if (!state.running) return;
+  if (!state.running || state.invulnerable > 0) return;
+  state.invulnerable = CONFIG.STING_GRACE; // a moment of safety so stings don't stack
 
   state.stings += 1;
   updateHearts();
@@ -436,12 +600,12 @@ function sting() {
   }
 }
 
-// Little "+1" that floats up from a caught bee
-function showFloatText(text, x, y) {
+// Little "+1" that floats up from a caught bee, with an optional icon
+function showFloatText(text, x, y, icon = null) {
   const span = document.createElement('span');
   span.className = 'float-text';
   span.setAttribute('aria-hidden', 'true');
-  span.textContent = text;
+  Icons.withText(span, icon, text);
   span.style.left = `${x}px`;
   span.style.top = `${y}px`;
   span.addEventListener('animationend', () => span.remove());
@@ -450,19 +614,39 @@ function showFloatText(text, x, y) {
 
 /* ---------- 8. LEVEL FLOW ---------- */
 
+// A brand new game: always starts at level 1
+function newGame() {
+  state.totalHoney = 0;
+  state.gameId += 1;
+  // A local seed so the game works offline; the server's seed replaces it if it answers.
+  // Seeds only matter from level 11, long after the server has replied.
+  state.seed = Math.floor(Math.random() * 2147483646);
+  const gameId = state.gameId;
+  Leaderboard.startRun().then((run) => {
+    if (run && Number.isInteger(run.seed) && state.gameId === gameId && state.level <= 10) {
+      state.seed = run.seed;
+    }
+  });
+  startLevel(1);
+}
+
 // Clear the meadow and begin a level
 function startLevel(level) {
   state.level = level;
-  state.settings = levelSettings(level);
+  state.chapter = Chapters.chapterForLevel(level);
+  state.plan = Chapters.levelPlan(state.seed, level);
+  state.settings = Chapters.levelSettings(level, state.plan);
+  state.dark = Chapters.isDarkLevel(level);
   state.honey = 0;
   state.stings = 0;
   state.spawnTimer = 0;
   state.stingCooldown = 1.5; // a short grace period at the start
+  state.invulnerable = 0;
+  state.queenTimer = rand(...CONFIG.QUEEN_FIRST);
   [...state.bees].forEach(removeBee);
 
-  // Level 1 means a brand new game: start a new run on the server
-  if (level === 1) Leaderboard.startRun();
-
+  saveFurthestLevel(level);
+  gameEl.classList.toggle('is-dark', state.dark);
   applyScene(level);
   updateLevel();
   updateHoney();
@@ -471,18 +655,65 @@ function startLevel(level) {
   state.running = true;
   state.lastTime = performance.now();
   gameEl.focus({ preventScroll: true });
-  announce(`Level ${level}, ${sceneForLevel(level).name}. Catch ${state.settings.target} bees.`);
+  showLevelBanner();
+}
+
+// Big "Level 12 · Sweet level!" banner over the meadow when a level starts
+function showLevelBanner() {
+  const { level, plan, chapter } = state;
+  let subtitle;
+  let icon = null;
+  if (level === chapter.firstLevel) {
+    subtitle = `Chapter ${chapter.number}: ${chapter.name}`;
+  } else if (plan.type === 'sweet') {
+    subtitle = `Sweet level! Only ${plan.target} bees`;
+    icon = 'honey';
+    BeeAudio.sweet();
+  } else if (plan.type === 'swarm') {
+    subtitle = `Swarm level! ${plan.target} bees`;
+    icon = 'swarm';
+    BeeAudio.swarm();
+  } else {
+    subtitle = `Catch ${plan.target} bees`;
+  }
+
+  levelBanner.querySelector('.level-banner__title').textContent = `Level ${level}`;
+  Icons.withText(levelBanner.querySelector('.level-banner__sub'), icon, subtitle);
+  replayClass(levelBanner, 'is-showing');
+  announce(`Level ${level}. ${subtitle}.`);
 }
 
 function completeLevel() {
   state.running = false;
   BeeAudio.levelUp();
+  const next = state.level + 1;
+  const nextText = Chapters.isChapterStart(next)
+    ? 'Next up: a brand new chapter!'
+    : `Next up: level ${next} in the ${Chapters.sceneForLevel(next).name}.`;
   levelSummary.textContent =
-    `You caught ${state.settings.target} bees on level ${state.level}. ` +
-    `Next up: level ${state.level + 1} in the ${sceneForLevel(state.level + 1).name}, ` +
-    `with faster, grumpier bees!`;
+    `You caught ${state.settings.target} bees on level ${state.level}. ${nextText}`;
   // Let the catch animation finish before the dialog appears
   setTimeout(() => levelDialog.showModal(), 500);
+}
+
+// Fill and open the "new chapter" screen; the level starts when it closes
+function showChapterIntro(level) {
+  const chapter = Chapters.chapterForLevel(level);
+  const art = Chapters.cardArt(chapter);
+  state.pendingLevel = level;
+
+  $('chapter-art').innerHTML = Chapters.beeSVG(art.bee) + Chapters.beeSVG(art.threat);
+  $('chapter-eyebrow').textContent = chapter.lastLevel === Infinity
+    ? `Levels ${chapter.firstLevel}+`
+    : `Chapter ${chapter.number} · Levels ${chapter.firstLevel}–${chapter.lastLevel}`;
+  $('chapter-title').textContent = chapter.name;
+  $('chapter-description').textContent = chapter.description;
+  $('chapter-bee').textContent = chapter.beeName;
+  $('chapter-flowers').textContent = chapter.flowerName;
+  $('chapter-challenge').textContent = chapter.challenge;
+
+  BeeAudio.chapter();
+  chapterDialog.showModal();
 }
 
 async function gameOver() {
@@ -490,7 +721,8 @@ async function gameOver() {
   BeeAudio.gameOver();
 
   overSummary.textContent =
-    `You reached level ${state.level} and collected ${state.totalHoney} honey in total.`;
+    `You reached level ${state.level} (chapter ${state.chapter.number}) ` +
+    `and collected ${state.totalHoney} honey in total.`;
 
   // Personal best lives on this device and never resets
   const { isNew, best } = Leaderboard.savePersonalBest({
@@ -498,7 +730,7 @@ async function gameOver() {
     level: state.level,
   });
   if (isNew) {
-    overBest.textContent = '🌟 New personal best!';
+    Icons.withText(overBest, 'star', 'New personal best!');
   } else if (best) {
     overBest.textContent = `Your personal best: ${describeRun(best)}`;
   } else {
@@ -519,8 +751,158 @@ async function gameOver() {
   setTimeout(() => overDialog.showModal(), 450);
 }
 
+/* ---------- CHAPTERS JOURNEY ----------
+   A winding path of level stops, like a board-game map. Level 1 sits at the
+   bottom and the path climbs up through each chapter's own little world.
+   Everything is placed with `bottom` (px) and `left` (%) inside .journey,
+   and one SVG path is drawn through the same points.
+   (All text comes from chapters.js, never from players, so innerHTML is safe.) */
+
+const JOURNEY = {
+  ROW: 84,           // vertical space per level stop (px)
+  SIGN: 170,         // space for each chapter's signpost (px)
+  BOTTOM: 24,        // space under level 1 (px)
+  TOP: 170,          // space for the "coming soon" cloud at the top (px)
+  ENDLESS_SHOWN: 5,  // endless stops shown beyond your furthest level
+};
+
+// The path snakes left and right; `i` counts stops from level 1 upwards
+function journeyX(i) {
+  return 50 + 28 * Math.sin(i * 0.85);
+}
+
+function renderJourney() {
+  const furthest = getFurthestLevel();
+  const container = $('journey');
+  const points = [];   // { x (%), y (px from bottom) } for every level stop, level 1 first
+  const chapterItems = [];
+  let y = JOURNEY.BOTTOM;
+  let stop = 0;
+
+  Chapters.list.forEach((chapter) => {
+    const endless = chapter.lastLevel === Infinity;
+    const last = endless
+      ? Math.max(chapter.firstLevel + JOURNEY.ENDLESS_SHOWN - 1, furthest + 2)
+      : chapter.lastLevel;
+    const unlocked = furthest >= chapter.firstLevel;
+    const finished = furthest > chapter.lastLevel;
+    const bandStart = y;
+
+    // Signpost at the start of the chapter
+    const signY = y;
+    y += JOURNEY.SIGN;
+
+    // Level stops
+    const levels = [];
+    for (let level = chapter.firstLevel; level <= last; level++) {
+      const point = { x: journeyX(stop), y: y + JOURNEY.ROW / 2 };
+      points.push(point);
+      levels.push({ level, ...point });
+      stop += 1;
+      y += JOURNEY.ROW;
+    }
+
+    chapterItems.push({ chapter, endless, unlocked, finished, bandStart, bandEnd: y, signY, levels });
+  });
+
+  const height = y + JOURNEY.TOP;
+
+  // Path through every stop: solid honey up to where you are, dashed after
+  const toSvg = (p) => `${p.x.toFixed(2)} ${(height - p.y).toFixed(1)}`;
+  const pathThrough = (list) => list.reduce((d, p, i) => {
+    if (i === 0) return `M${toSvg(p)}`;
+    const prev = list[i - 1];
+    const midY = (height - (prev.y + p.y) / 2).toFixed(1);
+    // Smooth S-curve between neighbouring stops
+    return `${d} C${prev.x.toFixed(2)} ${midY} ${p.x.toFixed(2)} ${midY} ${toSvg(p)}`;
+  }, '');
+  const reached = Math.min(furthest, points.length);
+  const donePath = pathThrough(points.slice(0, reached));
+  const todoPath = pathThrough(points.slice(reached - 1));
+
+  // Build each chapter's area
+  const chaptersHtml = chapterItems.map((item) => {
+    const { chapter, endless, unlocked, finished } = item;
+    const art = Chapters.cardArt(chapter);
+    const levelsText = endless
+      ? `Levels ${chapter.firstLevel}+`
+      : `Levels ${chapter.firstLevel}–${chapter.lastLevel}`;
+    const label = endless ? 'After the last chapter' : `Chapter ${chapter.number}`;
+
+    let status = `${Icons.svg('lock')}<span>Reach level ${chapter.firstLevel} to unlock</span>`;
+    if (finished) status = `${Icons.svg('check')}<span>Completed</span>`;
+    else if (unlocked) status = `${Icons.svg('pin')}<span>You are here</span>`;
+
+    // A few of the chapter's flowers along the edges of its area
+    const flowerTypes = chapter.flower === 'mixed'
+      ? ['daisy', 'tulip', 'sunflower', 'bluebell']
+      : [chapter.flower];
+    const bandHeight = item.bandEnd - item.bandStart;
+    const flowers = Array.from({ length: 6 }, (_, i) => {
+      const side = i % 2 === 0 ? 3 + (i % 3) * 3 : 85 + (i % 3) * 3;
+      // Measured from the bottom of this chapter's own band
+      const bottom = 30 + ((i * 0.37) % 1) * (bandHeight - 120);
+      const type = flowerTypes[i % flowerTypes.length];
+      return `<div class="journey-flower flower--${type}" style="left:${side}%;bottom:${bottom.toFixed(0)}px;--petal:${['#ff9ec4', '#c9a7ff', '#ffb38a', '#9fd3ff'][i % 4]}">${Chapters.flowerSVG(type)}</div>`;
+    }).join('');
+
+    const stops = item.levels.map(({ level, x, y: stopY }) => {
+      let stopState = 'locked';
+      let spoken = 'locked';
+      if (level < furthest) { stopState = 'done'; spoken = 'completed'; }
+      if (level === furthest) { stopState = 'current'; spoken = 'you are here'; }
+      const marker = stopState === 'current'
+        ? `<span class="journey-node__bee">${Chapters.beeSVG(chapter.bee === 'mixed' ? 'honey' : chapter.bee)}</span>`
+        : '';
+      const badge = stopState === 'locked' ? Icons.svg('lock') : stopState === 'done' ? Icons.svg('check') : '';
+      return `
+        <li class="journey-node is-${stopState}" style="left:${x.toFixed(2)}%;bottom:${(stopY - 24).toFixed(0)}px">
+          ${marker}
+          <span class="journey-node__num">${level}</span>
+          <span class="journey-node__badge">${badge}</span>
+          <span class="visually-hidden">, ${spoken}</span>
+        </li>`;
+    }).join('');
+
+    return `
+      <li class="journey-chapter journey-chapter--${chapter.number} ${unlocked ? '' : 'is-locked'}">
+        <div class="journey-chapter__bg" aria-hidden="true" style="bottom:${item.bandStart}px;height:${bandHeight}px">${flowers}</div>
+        <div class="journey-sign" style="bottom:${item.signY + 22}px">
+          <div class="journey-sign__art" aria-hidden="true">
+            ${Chapters.beeSVG(art.bee)}${unlocked ? Chapters.beeSVG(art.threat) : ''}
+          </div>
+          <p class="text-xs upper journey-sign__label">${label} · ${levelsText}</p>
+          <h3 class="font-display text-lg">${chapter.name}</h3>
+          <p class="text-sm">${unlocked ? chapter.challenge : 'A new bee and a new challenge'}</p>
+          <p class="journey-sign__status text-sm">${status}</p>
+        </div>
+        <ol class="journey-levels" aria-label="${chapter.name} levels">${stops}</ol>
+      </li>`;
+  }).join('');
+
+  container.style.height = `${height}px`;
+  container.innerHTML = `
+    <svg class="journey__path" viewBox="0 0 100 ${height}" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      <path class="journey__road" d="${pathThrough(points)}"/>
+      <path class="journey__trail journey__trail--todo" d="${todoPath}"/>
+      <path class="journey__trail journey__trail--done" d="${donePath}"/>
+    </svg>
+    <ol class="journey__chapters">${chaptersHtml}</ol>
+    <div class="journey-soon" style="bottom:${height - JOURNEY.TOP + 20}px">
+      ${Icons.svg('sprout', 'icon--large')}
+      <p class="font-display text-lg">More chapters coming soon</p>
+      <p class="text-sm text-soft">New bees, flowers and challenges are on their way.</p>
+    </div>`;
+
+  // Scroll so your current stop is in the middle
+  const current = points[reached - 1];
+  return () => {
+    const scroller = $('journey-scroll');
+    scroller.scrollTop = height - current.y - scroller.clientHeight / 2;
+  };
+}
+
 /* ---------- LEADERBOARD ---------- */
-const MEDALS = ['🥇', '🥈', '🥉'];
 
 // "23 honey, level 4"
 function describeRun(run) {
@@ -572,7 +954,9 @@ async function renderBoard(container, highlightId = null) {
     const rankCell = document.createElement('th');
     rankCell.scope = 'row';
     rankCell.className = 'rank';
-    rankCell.textContent = MEDALS[index] || String(index + 1);
+    // Gold, silver and bronze medals for the top three
+    if (index < 3) rankCell.innerHTML = Icons.medal(index + 1);
+    else rankCell.textContent = String(index + 1);
     rankCell.setAttribute('aria-label', `Rank ${index + 1}`);
 
     // textContent (not innerHTML) so a name can never inject HTML
@@ -658,6 +1042,13 @@ function updateFullscreenState() {
 /* ---------- 9. HUD UPDATES ---------- */
 function updateLevel() {
   levelValue.textContent = state.level;
+
+  // A little tag next to the level number for sweet and swarm levels
+  const tags = { sweet: ['honey', 'Sweet level'], swarm: ['swarm', 'Swarm level'] };
+  const tag = tags[state.plan.type];
+  if (tag) Icons.withText(levelType, tag[0], tag[1]);
+  levelType.dataset.type = state.plan.type;
+  levelType.hidden = !tags[state.plan.type];
 }
 
 function updateHoney() {
@@ -703,17 +1094,38 @@ function loop(now) {
 
   if (state.running && !state.paused) {
     state.stingCooldown = Math.max(0, state.stingCooldown - dt);
+    state.invulnerable = Math.max(0, state.invulnerable - dt);
+    const { features } = state.chapter;
 
-    // Keep the meadow topped up with bees
-    const active = state.bees.filter((b) => b.mode !== 'caught' && b.mode !== 'leave').length;
+    // Keep the meadow topped up with bees (and wasps, in wasp chapters)
+    const active = state.bees.filter(
+      (b) => (b.role === 'bee' || b.role === 'wasp') && b.mode !== 'caught' && b.mode !== 'leave'
+    ).length;
     state.spawnTimer -= dt;
     if (active < state.settings.beeCount && state.spawnTimer <= 0) {
-      spawnBee();
+      spawnBee(features.wasps && Math.random() < CONFIG.WASP_SHARE ? 'wasp' : 'bee');
       state.spawnTimer = CONFIG.SPAWN_DELAY;
     }
 
-    // Copy the list because bees can remove themselves while updating
+    // Queen chapters: every so often the queen visits (one at a time)
+    if (features.queen) {
+      state.queenTimer -= dt;
+      const queenHere = state.bees.some((b) => b.role === 'queen');
+      if (state.queenTimer <= 0 && !queenHere) {
+        spawnQueen();
+        state.queenTimer = rand(...CONFIG.QUEEN_EVERY);
+      }
+    }
+
+    // Copy the list because insects can remove themselves while updating
     [...state.bees].forEach((bee) => updateBee(bee, dt));
+  }
+
+  // Dark levels: move the lantern's lit circle to the net
+  if (state.dark) {
+    const lantern = lanternPosition();
+    darknessEl.style.setProperty('--lx', `${lantern.x}px`);
+    darknessEl.style.setProperty('--ly', `${lantern.y}px`);
   }
 
   state.bees.forEach(drawBee);
@@ -765,22 +1177,36 @@ gameEl.addEventListener('pointerdown', (event) => {
 $('start-btn').addEventListener('click', () => {
   BeeAudio.start();
   startDialog.close();
-  startLevel(1);
+  newGame();
 });
 
+// Next level: a new chapter gets its intro screen first
 $('next-btn').addEventListener('click', () => {
   levelDialog.close();
-  startLevel(state.level + 1);
+  const next = state.level + 1;
+  if (Chapters.isChapterStart(next)) {
+    showChapterIntro(next);
+  } else {
+    startLevel(next);
+  }
+});
+
+$('chapter-start-btn').addEventListener('click', () => chapterDialog.close());
+chapterDialog.addEventListener('close', () => {
+  if (state.pendingLevel) {
+    const level = state.pendingLevel;
+    state.pendingLevel = null;
+    startLevel(level);
+  }
 });
 
 $('restart-btn').addEventListener('click', () => {
   overDialog.close();
-  state.totalHoney = 0;
-  startLevel(1);
+  newGame();
 });
 
 // Pressing Escape on a dialog does the same as its main button, so the game never gets stuck
-[startDialog, levelDialog, overDialog, boardDialog].forEach((dialog) => {
+[startDialog, levelDialog, overDialog, boardDialog, chapterDialog, chaptersDialog].forEach((dialog) => {
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault();
     dialog.querySelector('[data-default]').click();
@@ -810,7 +1236,12 @@ scoreForm.addEventListener('submit', async (event) => {
   $('restart-btn').focus();
 });
 
-// Leaderboard button in the header: pause the game while it's open
+// Menus in the header pause the game while they're open
+function resumeAfterMenu() {
+  state.paused = false;
+  state.lastTime = performance.now();
+}
+
 $('board-btn').addEventListener('click', async () => {
   state.paused = true;
   const best = Leaderboard.getPersonalBest();
@@ -819,13 +1250,17 @@ $('board-btn').addEventListener('click', async () => {
   await renderBoard(boardList);
   boardDialog.showModal();
 });
-
 $('board-close').addEventListener('click', () => boardDialog.close());
+boardDialog.addEventListener('close', resumeAfterMenu);
 
-boardDialog.addEventListener('close', () => {
-  state.paused = false;
-  state.lastTime = performance.now();
+$('chapters-btn').addEventListener('click', () => {
+  state.paused = true;
+  const scrollToCurrent = renderJourney();
+  chaptersDialog.showModal();
+  scrollToCurrent(); // after opening, so the map has its real size
 });
+$('chapters-close').addEventListener('click', () => chaptersDialog.close());
+chaptersDialog.addEventListener('close', resumeAfterMenu);
 
 // Full screen button (works everywhere thanks to the fill-the-window fallback)
 fullscreenBtn.addEventListener('pointerdown', (event) => event.stopPropagation()); // don't swing the net
@@ -859,9 +1294,11 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// Build the scene and show the welcome screen
+// Build the scene, draw the page's icons and show the welcome screen
+Icons.fill();
 applyScene(1);
 buildHearts();
+updateLevel();
 updateHoney();
 updateHearts();
 startDialog.showModal();

@@ -329,8 +329,17 @@ button {
 }
 
 .new-high {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
   color: var(--color-honey-dark);
   animation: pop-in 400ms var(--ease-bounce);
+}
+
+.new-high .icon {
+  width: 26px;
+  height: 26px;
 }
 
 /* Leaderboard table */
@@ -379,7 +388,16 @@ button {
 
 /* Personal best line on the game-over screen */
 .personal-best {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
   color: var(--color-honey-dark);
+}
+
+.personal-best .icon {
+  width: 24px;
+  height: 24px;
 }
 
 .personal-best:empty {
@@ -416,6 +434,320 @@ button {
   transform: none;
 }
 
+/* ---- Chapter intro screen ---- */
+
+/* The new bee and its threat at the top of the chapter intro */
+.chapter-art {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.chapter-art svg {
+  width: 72px;
+  height: 64px;
+  overflow: visible;
+}
+
+/* Bee / Flowers / Challenge facts as a neat two-column list.
+   The label column is as wide as its longest label; values wrap if needed. */
+.chapter-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-cream);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+}
+
+/* Each <div> groups a dt/dd pair; "contents" lets them join the list's grid */
+.chapter-facts > div {
+  display: contents;
+}
+
+.chapter-facts dt {
+  font-weight: 800;
+  color: var(--color-ink-soft);
+}
+
+/* ---- Chapters journey map ----
+   A tall map inside a scrolling box. Every piece is placed by game.js
+   with `bottom` (px) and `left` (%), so level 1 sits at the bottom. */
+
+/* The journey dialog is tall and narrow, like a phone game map */
+.modal.modal--journey {
+  width: min(94vw, 560px);
+  height: min(90dvh, 900px);
+  padding: var(--space-4);
+}
+
+.modal--journey[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.journey-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: var(--radius-md);
+  background: var(--color-cream);
+  overscroll-behavior: contain;
+}
+
+.journey {
+  position: relative;
+  overflow: hidden;
+}
+
+.journey__chapters,
+.journey-levels {
+  list-style: none;
+}
+
+/* The road: a wide soft path, with the trail drawn on top */
+.journey__path {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.journey__road,
+.journey__trail {
+  fill: none;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke; /* keeps line widths even though the SVG is stretched */
+}
+
+.journey__road { stroke: rgba(255, 255, 255, 0.75); stroke-width: 22; }
+.journey__trail--todo { stroke: rgba(122, 102, 80, 0.35); stroke-width: 4; stroke-dasharray: 2 10; }
+.journey__trail--done { stroke: var(--color-honey); stroke-width: 6; }
+
+/* Each chapter's little world: a coloured band behind its stops */
+.journey-chapter__bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 0;
+}
+
+.journey-chapter--1 .journey-chapter__bg { background: linear-gradient(#cdeaa8, #a9d77f); }
+.journey-chapter--2 .journey-chapter__bg { background: linear-gradient(#f4d6ff, #ffd1e6); }
+.journey-chapter--3 .journey-chapter__bg { background: linear-gradient(#ffe7a3, #ffd36b); }
+.journey-chapter--4 .journey-chapter__bg {
+  /* Night: a few stars over a deep blue */
+  background:
+    radial-gradient(2px 2px at 20% 20%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 70% 35%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 40% 70%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 85% 80%, #fff 50%, transparent 51%),
+    linear-gradient(#1d2550, #3b4183);
+}
+.journey-chapter--5 .journey-chapter__bg { background: linear-gradient(#d7f0ff, #e9dcff, #ffe3f0); }
+
+/* Locked worlds are faded until you reach them */
+.journey-chapter.is-locked .journey-chapter__bg {
+  filter: grayscale(0.7);
+  opacity: 0.6;
+}
+
+/* Decorative flowers along the edges of each world */
+.journey-flower {
+  position: absolute;
+  width: 34px;
+  height: 76px;
+  transform: translateX(-50%);
+}
+
+.journey-flower svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Signpost at the start of each chapter */
+.journey-sign {
+  position: absolute;
+  left: 50%;
+  z-index: 3;
+  width: min(80%, 300px);
+  padding: var(--space-3) var(--space-4);
+  transform: translateX(-50%);
+  background: var(--color-paper);
+  border: 3px solid #f3dfb4;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+
+.journey-sign__art {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.journey-sign__art svg {
+  width: 44px;
+  height: 38px;
+  overflow: visible;
+}
+
+.journey-sign__label {
+  color: var(--color-ink-soft);
+}
+
+.journey-sign__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  font-weight: 800;
+}
+
+.journey-chapter.is-locked .journey-sign__art svg {
+  filter: brightness(0);
+  opacity: 0.25;
+}
+
+/* Level stops: round honey buttons along the path */
+.journey-node {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-weight: 700;
+  border: 3px solid #fff;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.15);
+}
+
+.journey-node.is-done {
+  background: var(--color-honey);
+  color: var(--color-ink);
+}
+
+.journey-node.is-current {
+  width: 58px;
+  height: 58px;
+  background: #ffe7a8;
+  color: var(--color-ink);
+  border-color: var(--color-honey);
+  box-shadow: 0 0 0 6px rgba(246, 185, 59, 0.35), 0 4px 0 rgba(0, 0, 0, 0.15);
+  animation: node-pulse 1.8s ease-in-out infinite;
+}
+
+.journey-node.is-locked {
+  background: #e9e1d2;
+  color: #9a8b78;
+}
+
+/* Little badge on the corner of a stop: a tick or a lock */
+.journey-node__badge {
+  position: absolute;
+  right: -6px;
+  bottom: -4px;
+  display: flex;
+}
+
+.journey-node__badge:empty {
+  display: none;
+}
+
+/* Your bee hovering over the stop you've reached */
+.journey-node__bee {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  width: 52px;
+  height: 46px;
+  transform: translateX(-50%);
+  animation: hover-bob 2.4s ease-in-out infinite;
+}
+
+.journey-node__bee svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* "More chapters coming soon" cloud at the very top */
+.journey-soon {
+  position: absolute;
+  left: 50%;
+  z-index: 3;
+  width: min(80%, 300px);
+  padding: var(--space-3) var(--space-4);
+  transform: translateX(-50%);
+  background: var(--color-paper);
+  border: 3px dashed #f0d9a8;
+  border-radius: var(--radius-pill);
+}
+
+/* Small status icons (lock, tick, pin, sprout) */
+.icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.icon--large {
+  width: 34px;
+  height: 34px;
+}
+
+.icon__dot { fill: var(--color-honey-dark); }
+.icon__lid { fill: var(--color-honey-dark); }
+.icon__drip { fill: #ffd56b; }
+.icon__shine { fill: none; stroke: #fff6d6; stroke-width: 1.6; stroke-linecap: round; }
+.icon__petal { fill: var(--color-pink); stroke: #e2729e; stroke-width: 1; }
+.icon__burst { fill: #ff8a6b; stroke: var(--color-danger); stroke-width: 1.2; stroke-linejoin: round; }
+.icon__crown { fill: #ffd700; stroke: var(--color-ink); stroke-width: 1.4; stroke-linejoin: round; }
+.icon__minibee ellipse { fill: #ffd23f; stroke: var(--color-ink); stroke-width: 1.3; }
+.icon__minibee path { stroke: var(--color-ink); stroke-width: 1.8; }
+.icon__ribbon { fill: #7fb2e8; stroke: #5a8ccc; stroke-width: 1; stroke-linejoin: round; }
+.icon__medal { stroke-width: 1.4; }
+.icon__rank { font-family: var(--font-display); font-size: 8px; font-weight: 700; fill: var(--color-ink); }
+
+/* Medal colours */
+.icon--gold .icon__medal { fill: #ffd34d; stroke: #d99e00; }
+.icon--silver .icon__medal { fill: #e3e8ee; stroke: #9aa6b2; }
+.icon--bronze .icon__medal { fill: #f0b27a; stroke: #b97440; }
+.board .rank .icon { width: 26px; height: 26px; vertical-align: middle; }
+
+/* The honeybee artwork used as an icon */
+.icon--bee {
+  display: inline-block;
+  width: 50px;
+  height: 44px;
+}
+
+.icon--bee svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.logo-mark .icon--bee {
+  width: 100%;
+  height: 100%;
+}
+
+/* Icons sit nicely inside floating text, banners and chips */
+.float-text .icon { width: 22px; height: 22px; }
+.level-banner__sub .icon { width: 22px; height: 22px; }
+.level-chip .icon { width: 14px; height: 14px; }
+.icon__tick { fill: none; stroke: var(--color-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.icon__leaf { fill: #8fcf6a; stroke: #5a9b3c; stroke-width: 1.5; }
+
 /* Modal dialogs */
 .modal {
   margin: auto;
@@ -432,9 +764,17 @@ button {
   animation: pop-in 350ms var(--ease-bounce);
 }
 
-.modal__emoji {
-  font-size: 2.5rem;
-  line-height: 1;
+/* Row of icons at the top of a dialog */
+.modal__icons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.modal__icons .icon {
+  width: 44px;
+  height: 44px;
 }
 
 .rules {
@@ -450,9 +790,13 @@ button {
 
 /* Small flower bullet for the rules list */
 .rules li::before {
-  content: "🌸";
+  content: "";
   position: absolute;
   left: 0;
+  top: 0.2em;
+  width: 1.1em;
+  height: 1.1em;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='%23ff9ec4'%3E%3Ccircle cx='12' cy='6.5' r='3.6'/%3E%3Ccircle cx='17.2' cy='10.3' r='3.6'/%3E%3Ccircle cx='15.2' cy='16.5' r='3.6'/%3E%3Ccircle cx='8.8' cy='16.5' r='3.6'/%3E%3Ccircle cx='6.8' cy='10.3' r='3.6'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='3' fill='%23f6b93b'/%3E%3C/svg%3E") no-repeat center / contain;
 }
 
 /* ---------- 5. PAGE LAYOUT ---------- */
@@ -475,9 +819,15 @@ button {
 }
 
 .logo-mark {
-  font-size: 2.5rem;
   display: inline-block;
+  width: 56px;
+  height: 50px;
   animation: hover-bob 2.4s ease-in-out infinite;
+}
+
+/* Header buttons wrap onto a second row on narrow screens */
+.header-actions {
+  flex-wrap: wrap;
 }
 
 .site-main {
@@ -665,6 +1015,17 @@ button {
 .flower__petal { fill: var(--petal); }
 .flower__center { fill: #ffd45c; stroke: #e9a92a; stroke-width: 1.5; }
 
+/* Chapter flowers: tulips, sunflowers and bluebells */
+.flower__cup,
+.flower__bell { stroke: rgba(0, 0, 0, 0.12); stroke-width: 1; }
+.flower__stem--thick { stroke-width: 4.5; }
+.flower__stem--thin { stroke-width: 1.5; }
+.flower__ray { fill: var(--petal); stroke: #e8a317; stroke-width: 0.8; }
+.flower__seeds { fill: #7a4a1e; stroke: #5a3412; stroke-width: 1.5; }
+
+/* Sunflowers stand a little taller than the rest */
+.flower--sunflower { height: 100px; }
+
 /* ---- Bees ---- */
 /* Bees are real <button>s so they can be focused and caught by keyboard */
 .bee {
@@ -740,6 +1101,10 @@ button {
 /* Floating "+1" text when a bee is caught */
 .float-text {
   position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: var(--fs-lg);
@@ -748,6 +1113,114 @@ button {
   pointer-events: none;
   z-index: 300;
   animation: float-up 900ms ease-out forwards;
+}
+
+/* ---- Chapter bees, wasps, the queen and her soldiers ---- */
+
+/* Bumblebee & carpenter bee fluff: a dashed outline reads as fuzz */
+.bee__body--fuzzy { stroke-dasharray: 1.5 2.5; stroke-width: 3; stroke-linecap: round; }
+.bee__tail { fill: #fff6e6; }
+.bee__body--dark { fill: #34303f; }
+.bee__gloss { fill: #ffffff; opacity: 0.35; }
+.bee__body--glow { fill: #fff6c2; }
+.bee__stripe--soft { fill: #6b5a8e; }
+.bee__body--queen { fill: #ffc94a; }
+.bee__stripe--royal { fill: #7b3fa0; }
+.bee__crown { fill: #ffd700; stroke: var(--color-ink); stroke-width: 1.5; stroke-linejoin: round; }
+.bee__body--soldier { fill: #ff8a6b; }
+.bee__brow { fill: none; stroke: var(--color-ink); stroke-width: 2.2; stroke-linecap: round; }
+
+/* Glow bees shine softly (so you can find them in the dark) */
+.bee--glow .bee__art {
+  filter: drop-shadow(0 0 6px rgba(255, 240, 150, 0.95));
+}
+
+/* Wasps get slimmer, darker wings */
+.bee--wasp .bee__wing { fill: rgba(220, 230, 255, 0.6); stroke: #8aa0c8; }
+
+/* The queen's royal glow */
+.bee--queen .bee__art {
+  filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.7));
+}
+
+/* Soldiers aren't buttons, but you can still bump into them */
+.bee--soldier {
+  cursor: none;
+}
+
+/* ---- Darkness (chapter 4) ----
+   A dark layer with a warm hole cut around the lantern (the net).
+   --lx / --ly are set by game.js every frame. */
+.darkness {
+  position: absolute;
+  inset: 0;
+  z-index: 150; /* above flowers, below insects (which game.js lifts above it) */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 800ms ease;
+  background: radial-gradient(
+    circle 150px at var(--lx, 50%) var(--ly, 60%),
+    rgba(255, 214, 140, 0.16) 0%,
+    rgba(12, 14, 44, 0.4) 55%,
+    rgba(8, 10, 32, 0.86) 100%
+  );
+}
+
+.game.is-dark .darkness {
+  opacity: 1;
+}
+
+/* ---- Level banner: "Level 12 · Sweet level!" ---- */
+.level-banner {
+  position: absolute;
+  top: 26%;
+  left: 50%;
+  z-index: 550;
+  width: max-content;
+  max-width: 90%;
+  padding: var(--space-3) var(--space-6);
+  text-align: center;
+  background: rgba(255, 253, 247, 0.92);
+  border: 3px solid #f3dfb4;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+}
+
+.level-banner.is-showing {
+  animation: banner 2.6s ease forwards;
+}
+
+.level-banner__title {
+  font-size: var(--fs-xl);
+  color: var(--color-honey-dark);
+}
+
+.level-banner__sub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-weight: 800;
+}
+
+/* Small "Sweet level" / "Swarm level" tag in the HUD */
+.level-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  border-radius: var(--radius-pill);
+  background: #ffe7a8;
+  white-space: nowrap;
+}
+
+.level-chip[data-type="swarm"] {
+  background: #ffd3c4;
 }
 
 /* ---- Custom cursor (bee net) ---- */
@@ -1050,6 +1523,19 @@ button {
   to { opacity: 1; filter: blur(0); }
 }
 
+@keyframes banner {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.9); }
+  12% { opacity: 1; transform: translate(-50%, -50%) scale(1.04); }
+  20% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -60%) scale(0.98); }
+}
+
+@keyframes node-pulse {
+  0%, 100% { transform: translateX(-50%) scale(1); }
+  50% { transform: translateX(-50%) scale(1.06); }
+}
+
 @keyframes pop-in {
   from { transform: scale(0.85); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
@@ -1059,6 +1545,11 @@ button {
 
 /* Small screens: stack the HUD into two rows (pot on top spanning full width) */
 @media (max-width: 560px) {
+  .header-actions .btn {
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--fs-sm);
+  }
+
   .hud {
     grid-template-columns: 1fr 1fr;
   }

@@ -236,6 +236,42 @@ const BeeAudio = (() => {
       });
     },
 
+    // Sweet level: a bright little sparkle
+    sweet() {
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      [NOTE.C5 * 2, NOTE.E5 * 2, NOTE.G5 * 2].forEach((freq, i) => {
+        tone({ freq, type: 'sine', start: now + i * 0.07, duration: 0.25, volume: 0.12 });
+      });
+    },
+
+    // Swarm level / soldiers: a low buzzy rise
+    swarm() {
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      tone({ freq: 140, endFreq: 300, type: 'sawtooth', start: now, duration: 0.6, volume: 0.06 });
+      tone({ freq: 90, type: 'sine', start: now, duration: 0.2, volume: 0.25 });
+      tone({ freq: 90, type: 'sine', start: now + 0.22, duration: 0.2, volume: 0.25 });
+    },
+
+    // The queen arrives: a tiny royal fanfare
+    queen() {
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      [NOTE.G4, NOTE.C5, NOTE.E5, NOTE.G5].forEach((freq, i) => {
+        tone({ freq, type: 'square', start: now + i * 0.11, duration: 0.22, volume: 0.05 });
+      });
+    },
+
+    // A new chapter: a longer, hopeful arpeggio
+    chapter() {
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      [NOTE.C5, NOTE.E5, NOTE.G5, NOTE.C5 * 2, NOTE.E5 * 2].forEach((freq, i) => {
+        tone({ freq, type: 'triangle', start: now + i * 0.14, duration: 0.6, volume: 0.15 });
+      });
+    },
+
     gameOver() {
       if (!ctx) return;
       const now = ctx.currentTime;
