@@ -52,8 +52,8 @@ const Chapters = (() => {
       flowerName: 'Sunflowers',
       challenge: 'Wasp decoys',
       description:
-        'Wasps are sneaking in among the bees. They are slimmer, with pointy tails and ' +
-        'grumpy eyebrows. Click a wasp and you get stung, so look before you swing!',
+        'Wasps keep drifting in among the bees. They are slimmer, with pointy tails and ' +
+        'grumpy eyebrows. Click a wasp and you get stung, so leave them be: they buzz off on their own.',
       features: { queen: false, wasps: true, dark: false },
     },
     {

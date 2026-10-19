@@ -14,7 +14,12 @@
   <!-- Inline SVG favicon (a tiny honey drop) so there is no extra file to load -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 C10 12 7 16 7 21 a9 9 0 0 0 18 0 C25 16 22 12 16 3Z' fill='%23f6b93b'/%3E%3C/svg%3E" />
 
-  <link rel="stylesheet" href="css/styles.css" />
+  <!--
+    VERSION: the ?v= number on the CSS and JS files makes browsers download fresh
+    copies after an update instead of using old saved ones. When you release a
+    change, bump it everywhere in this file (search for "?v=") and in the footer.
+  -->
+  <link rel="stylesheet" href="css/styles.css?v=1.7" />
 </head>
 
 <body class="page">
@@ -196,7 +201,7 @@
 
   <!-- ===================== FOOTER ===================== -->
   <footer class="site-footer container flex justify-center">
-    <p class="text-sm text-soft">Built by Sophia Ahuoyiza</p>
+    <p class="text-sm text-soft">Built by Sophia Ahuoyiza · <span class="version">v1.7</span></p>
   </footer>
 
   <!-- ===================== DIALOGS ===================== -->
@@ -321,10 +326,10 @@
   <!-- Screen reader announcements (catches, stings, level changes) -->
   <p id="announcer" class="visually-hidden" aria-live="polite"></p>
 
-  <script src="js/audio.js"></script>
-  <script src="js/leaderboard.js"></script>
-  <script src="js/chapters.js"></script>
-  <script src="js/icons.js"></script>
-  <script src="js/game.js"></script>
+  <script src="js/audio.js?v=1.7"></script>
+  <script src="js/leaderboard.js?v=1.7"></script>
+  <script src="js/chapters.js?v=1.7"></script>
+  <script src="js/icons.js?v=1.7"></script>
+  <script src="js/game.js?v=1.7"></script>
 </body>
 </html>

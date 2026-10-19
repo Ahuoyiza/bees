@@ -18,7 +18,7 @@ Built with plain **HTML, CSS and JavaScript**. There are no frameworks, no build
    |---|---|---|---|---|
    | 1. The Meadow | 1–10 | Honeybee | Daisies | Angry bees turn red and dive at your net |
    | 2. The Queen's Garden | 11–20 | Bumblebee | Tulips | The queen swoops in and quickly sends 3–4 soldier bees after your net. She can't be caught, so dodge the soldiers |
-   | 3. Sunflower Fields | 21–30 | Carpenter bee | Sunflowers | Wasp decoys: clicking a wasp gets you stung |
+   | 3. Sunflower Fields | 21–30 | Carpenter bee | Sunflowers | Wasp decoys drift in every few seconds. Clicking one gets you stung, so avoid them; each wasp flies off on its own after a while |
    | 4. Moonlit Grove | 31–40 | Glow bee | Bluebells | Darkness: only a lantern around your net lights the meadow |
    | Endless Meadow | 41+ | Every kind | Every kind | All the challenges mixed, until you're stung out |
 
@@ -59,6 +59,8 @@ python3 -m http.server 8000
 ```
 
 Then visit <http://localhost:8000> in your browser.
+
+> **Releasing an update:** bump the version number in `index.html` (every `?v=` and the footer). That makes players' browsers download the new files instead of reusing old saved copies. Players can check which version they have in the footer.
 
 > Browsers only allow sound after you interact with the page, so the music starts when you press **Start buzzing**. Use the **Sound** button in the header to mute it.
 
@@ -116,7 +118,7 @@ The sky, sun, clouds, hills and grass only use colour tokens such as `--color-sk
 - **Level plan:** `levelPlan(seed, level)` decides whether a level is sweet, normal or swarm. It uses a small repeatable "random" formula, so the same seed always gives the same plan.
 - **Starting level:** `newGame(level)` asks the server for a run with `start_run(p_start_level)` and waits up to 3 seconds for its seed before starting. The server stores the starting level and counts levels up from there. Starting later gives no leaderboard advantage, because ranking is by honey (1 per bee) and later levels are harder.
 - **Server check:** each online game gets its seed from the server. `level_for_honey()` in `supabase/schema.sql` runs the same formula to work out which level a score really reached. If you change the level rules, change both.
-- **Insects in `game.js`:** each insect has a `role` (`bee`, `wasp`, `queen` or `soldier`) and a `mode` (`fly`, `warn`, `dive`, `chase`, `leave` or `caught`). Each role has its own movement function.
+- **Insects in `game.js`:** each insect has a `role` (`bee`, `wasp`, `queen` or `soldier`) and a `mode` (`fly`, `warn`, `dive`, `chase`, `leave` or `caught`). Each role has its own movement function. Bees keep the meadow at its full count, while wasps arrive on their own timer (at most about one per three bees) and leave by themselves after 8–14 seconds, so they never crowd the bees out.
 - **Darkness:** a dark layer with a radial-gradient "hole" that follows the net. Insects fade the further they are from the lantern.
 - **Journey map:** `renderJourney()` lays out every level stop with `bottom` (px) and `left` (%), snaking left and right along a sine wave. One stretched SVG path runs through the same points: solid honey up to your furthest level, dashed after it. Each chapter gets a themed background band, a signpost and a few of its flowers. Your furthest level is saved in `localStorage`, and the map scrolls to it when it opens. Locked chapters show only a silhouette of their bee.
 - **Icons:** every icon in the game is a small inline SVG from `icons.js`, drawn in the honey style. There's no emoji, so icons look the same on every device. In the HTML, `<span data-icon="trophy">` is filled at start-up by `Icons.fill()`. In code, `Icons.svg('crown')`, `Icons.medal(1)` and `Icons.withText(el, 'honey', 'Sweet level')` build icons. Icons are decorative (`aria-hidden`); the text beside them, or an `aria-label`, carries the meaning.
