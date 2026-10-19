@@ -17,7 +17,7 @@ Built with plain **HTML, CSS and JavaScript**. There are no frameworks, no build
    | Chapter | Levels | Bee | Flowers | Challenge |
    |---|---|---|---|---|
    | 1. The Meadow | 1–10 | Honeybee | Daisies | Angry bees turn red and dive at your net |
-   | 2. The Queen's Garden | 11–20 | Bumblebee | Tulips | The queen flies over and sends 3–4 soldier bees after your net. Dodge them, or catch the queen first |
+   | 2. The Queen's Garden | 11–20 | Bumblebee | Tulips | The queen swoops in and quickly sends 3–4 soldier bees after your net. She can't be caught, so dodge the soldiers |
    | 3. Sunflower Fields | 21–30 | Carpenter bee | Sunflowers | Wasp decoys: clicking a wasp gets you stung |
    | 4. Moonlit Grove | 31–40 | Glow bee | Bluebells | Darkness: only a lantern around your net lights the meadow |
    | Endless Meadow | 41+ | Every kind | Every kind | All the challenges mixed, until you're stung out |

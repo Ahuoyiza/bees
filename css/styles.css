@@ -1143,6 +1143,11 @@ button {
   filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.7));
 }
 
+/* The queen can't be caught, so clicks pass through her to the bees behind */
+.bee--queen {
+  pointer-events: none;
+}
+
 /* Soldiers aren't buttons, but you can still bump into them */
 .bee--soldier {
   cursor: none;

@@ -37,8 +37,8 @@ const Chapters = (() => {
       flowerName: 'Tulips',
       challenge: 'The queen bee',
       description:
-        'Now and then the queen flies over and sends 3 or 4 soldier bees after your net. ' +
-        'Dodge them! Catch the queen before she calls them, and her soldiers stay home.',
+        'Now and then the queen swoops in and sends 3 or 4 soldier bees after your net. ' +
+        'She is far too grand to be caught, so dodge her soldiers and keep catching bees!',
       features: { queen: true, wasps: false, dark: false },
     },
     {

@@ -32,6 +32,8 @@ const CONFIG = {
   WASP_SHARE: 0.3,        // in wasp chapters, about 3 in 10 new insects are wasps
   QUEEN_EVERY: [14, 22],  // seconds between queen visits (random in this range)
   QUEEN_FIRST: [6, 10],   // seconds before the first queen of a level
+  QUEEN_SWOOP: 260,       // how fast the queen flies in (px per second)
+  QUEEN_CALL_TIME: 0.5,   // seconds she glows before her soldiers come out
   SOLDIER_TIME: 5,        // seconds soldiers chase the net before giving up
   SOLDIER_HIT_RADIUS: 22, // how close a soldier must get to sting (px)
   LANTERN_RADIUS: 150,    // size of the lit circle in dark levels (px)
@@ -206,13 +208,13 @@ function applyScene(level) {
    Everything that flies is an "insect" object in state.bees with a `role`:
      bee     → catch it for honey
      wasp    → a decoy: clicking it stings you
-     queen   → catch her for honey; if she gets halfway she calls soldiers
+     queen   → can't be caught; she swoops in, calls soldiers, then flies off
      soldier → chases your net; touching one stings you
    Each insect also has a `mode` (what it's doing right now):
      fly → warn → dive → leave, chase → leave, or caught */
 
-// Build the element for any insect. Bees, wasps and the queen are buttons so
-// keyboard users can reach them; soldiers are decorative (they come to you).
+// Build the element for any insect. Bees and wasps are buttons so keyboard
+// users can reach them; the queen and her soldiers are decorative (they come to you).
 function createInsect({ role, kind, label }) {
   const el = document.createElement(label ? 'button' : 'div');
   if (label) {
@@ -289,25 +291,23 @@ function spawnBee(role) {
   pickTarget(bee);
 }
 
-// The queen glides across high up. Halfway-ish she stops and calls her soldiers.
+// The queen swoops in from the side, calls her soldiers almost straight away,
+// then flies off. She can't be caught, so there's nothing to click.
 function spawnQueen() {
   const { w } = fieldSize();
   const fromLeft = Math.random() < 0.5;
-  const queen = createInsect({
-    role: 'queen',
-    kind: 'queen',
-    label: 'Queen bee. Catch her before she calls her soldiers!',
-  });
+  const queen = createInsect({ role: 'queen', kind: 'queen' });
   queen.x = fromLeft ? -70 : w + 70;
   queen.z = 0.3;
   queen.baseAltitude = 190;
   queen.facing = fromLeft ? 1 : -1;
   queen.size = 1.5;
-  queen.deployAt = rand(0.3, 0.7) * w;
-  queen.deployed = false;
+  // She stops just inside the meadow (15–30% in from her side)
+  const stopAt = rand(0.15, 0.3) * w;
+  queen.deployAt = fromLeft ? stopAt : w - stopAt;
 
   BeeAudio.queen();
-  announce('The queen bee is here! Catch her before she calls her soldiers.');
+  announce('The queen bee is here! Get ready to dodge her soldiers.');
 }
 
 // The queen sends 3 or 4 soldiers after the net
@@ -408,35 +408,30 @@ function updateWanderer(bee, dt) {
   }
 }
 
-// The queen: glide across, pause to call soldiers, glide off
+// The queen: swoop in, glow for a moment, release the soldiers, fly away
 function updateQueen(queen, dt) {
   queen.altitude = queen.baseAltitude + Math.sin(queen.phase) * 10;
 
-  // Calling her soldiers: she hovers and glows for a moment first
+  // Calling her soldiers: a short glow so the player sees it coming
   if (queen.mode === 'warn') {
     queen.timer -= dt;
     if (queen.timer <= 0) {
-      queen.mode = 'fly';
       queen.el.classList.remove('is-angry');
       deploySoldiers(queen);
+      queen.mode = 'leave'; // job done: she zooms up and away
     }
     return;
   }
 
-  const glide = Math.max(state.settings.speed * 0.5, 60);
-  queen.x += queen.facing * glide * dt;
+  queen.x += queen.facing * CONFIG.QUEEN_SWOOP * dt;
 
-  const reachedMiddle = queen.facing > 0 ? queen.x >= queen.deployAt : queen.x <= queen.deployAt;
-  if (!queen.deployed && reachedMiddle) {
-    queen.deployed = true;
+  const arrived = queen.facing > 0 ? queen.x >= queen.deployAt : queen.x <= queen.deployAt;
+  if (arrived) {
     queen.mode = 'warn';
-    queen.timer = 1;
+    queen.timer = CONFIG.QUEEN_CALL_TIME;
     queen.el.classList.add('is-angry');
     BeeAudio.warn();
   }
-
-  const { w } = fieldSize();
-  if (queen.x < -90 || queen.x > w + 90) removeBee(queen);
 }
 
 // Soldiers buzz after the net for a few seconds, then give up and leave
@@ -535,6 +530,7 @@ function maybeGetAngry(bee, dt) {
 function pressInsect(insect) {
   if (!state.running || state.paused) return;
   if (insect.mode === 'caught' || insect.mode === 'leave') return;
+  if (insect.role === 'queen') return; // the queen can't be caught
 
   if (insect.role === 'wasp') {
     showFloatText('Wasp!', insect.sx, insect.sy - 20, 'burst');
@@ -548,10 +544,8 @@ function pressInsect(insect) {
   }
 }
 
-// The player caught a bee (or the queen)
+// The player caught a bee
 function catchBee(bee) {
-  const queenEarly = bee.role === 'queen' && bee.mode !== 'warn' && !bee.deployed;
-
   bee.mode = 'caught';
   bee.el.classList.remove('is-angry');
   bee.el.classList.add('is-caught');
@@ -560,8 +554,7 @@ function catchBee(bee) {
   bee.shadow.style.opacity = '0';
   setTimeout(() => removeBee(bee), 460);
 
-  if (queenEarly) showFloatText('Queen caught!', bee.sx, bee.sy - 20, 'crown');
-  else showFloatText('+1', bee.sx, bee.sy - 20, 'drop');
+  showFloatText('+1', bee.sx, bee.sy - 20, 'drop');
   replayClass(cursorEl, 'is-swinging');
   BeeAudio.catch();
 
@@ -573,8 +566,6 @@ function catchBee(bee) {
 
   if (state.honey >= state.settings.target) {
     completeLevel();
-  } else if (queenEarly) {
-    announce(`You caught the queen! No soldiers this time. ${state.honey} of ${state.settings.target}.`);
   } else {
     announce(`Caught a bee! ${state.honey} of ${state.settings.target}.`);
   }
