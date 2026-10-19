@@ -1,0 +1,753 @@
+/* =========================================================
+   BEES — stylesheet
+   Structure:
+   1. Design tokens (colours, fonts, spacing, radii, shadows)
+   2. Reset & base
+   3. Reusable utility classes (layout, typography, spacing)
+   4. Reusable components (buttons, cards, modals)
+   5. Page layout (header, main, footer)
+   6. HUD (level, honey pot, hearts)
+   7. Game scene (sky, hills, ground, flowers, bees, cursor)
+   8. Animations
+   9. Responsive & reduced-motion tweaks
+   ========================================================= */
+
+/* ---------- 1. DESIGN TOKENS ---------- */
+:root {
+  /* Colours */
+  --color-sky-top: #bfe4ff;
+  --color-sky-bottom: #fff1d6;
+  --color-sun: #ffe08a;
+  --color-hill-back: #cde9a6;
+  --color-hill-front: #a9d77f;
+  --color-grass-light: #9fd170;
+  --color-grass-dark: #6fb04c;
+  --color-honey: #f6b93b;
+  --color-honey-dark: #d98e04;
+  --color-cream: #fff8e7;
+  --color-paper: #fffdf7;
+  --color-ink: #4a3b2a;
+  --color-ink-soft: #7a6650;
+  --color-pink: #ff9ec4;
+  --color-danger: #e85d5d;
+  --color-focus: #6b8cff;
+
+  /* Typography */
+  --font-display: "Fredoka", "Nunito", system-ui, sans-serif;
+  --font-body: "Nunito", system-ui, -apple-system, sans-serif;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.75rem;
+  --fs-xxl: clamp(2rem, 5vw, 3rem);
+  --lh-tight: 1.1;
+  --lh-body: 1.5;
+
+  /* Spacing scale (used for margin, padding and gaps) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  /* Shape & depth */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+  --radius-pill: 999px;
+  --shadow-soft: 0 6px 18px rgba(122, 90, 40, 0.15);
+  --shadow-pop: 0 4px 0 var(--color-honey-dark), 0 10px 20px rgba(217, 142, 4, 0.3);
+
+  /* Motion */
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-fast: 150ms ease;
+
+  /* Layout */
+  --container-max: 1100px;
+  --horizon: 42%; /* where the ground starts inside the game scene */
+}
+
+/* ---------- 2. RESET & BASE ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  color: var(--color-ink);
+  background: radial-gradient(circle at top, var(--color-cream), #fbe9c4);
+  -webkit-font-smoothing: antialiased;
+}
+
+ul {
+  list-style: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* One clear focus style everywhere for keyboard users */
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+/* ---------- 3. UTILITY CLASSES ---------- */
+
+/* Layout: flexbox helpers */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.items-start { align-items: flex-start; }
+.items-end { align-items: flex-end; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+
+/* Gaps (work for both flex and grid) */
+.gap-1 { gap: var(--space-1); }
+.gap-2 { gap: var(--space-2); }
+.gap-3 { gap: var(--space-3); }
+.gap-4 { gap: var(--space-4); }
+
+/* "Stack": evenly spaces children vertically */
+.stack > * + * {
+  margin-top: var(--space-4);
+}
+
+/* Centered, max-width wrapper with side gutters */
+.container {
+  width: 100%;
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding-inline: var(--space-4);
+}
+
+/* Typography helpers */
+.font-display { font-family: var(--font-display); line-height: var(--lh-tight); }
+.text-xs { font-size: var(--fs-xs); }
+.text-sm { font-size: var(--fs-sm); }
+.text-md { font-size: var(--fs-md); }
+.text-lg { font-size: var(--fs-lg); }
+.text-xl { font-size: var(--fs-xl); }
+.text-xxl { font-size: var(--fs-xxl); }
+.text-soft { color: var(--color-ink-soft); }
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.upper { text-transform: uppercase; letter-spacing: 0.08em; font-weight: 800; }
+
+/* Hide visually but keep available to screen readers */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- 4. COMPONENTS ---------- */
+
+/* Card: soft paper panel used by the HUD and dialogs */
+.card {
+  background: var(--color-paper);
+  border: 3px solid #f3dfb4;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  padding: var(--space-4) var(--space-5);
+}
+
+/* Button base + variants */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border: none;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-md);
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.btn:active {
+  transform: translateY(3px);
+}
+
+.btn--primary {
+  background: var(--color-honey);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--fs-lg);
+}
+
+.btn--primary:hover {
+  transform: translateY(-2px);
+}
+
+.btn--ghost {
+  background: var(--color-paper);
+  border: 2px solid #f3dfb4;
+}
+
+.btn--ghost:hover {
+  background: var(--color-cream);
+}
+
+/* Sound toggle icon: honey-coloured speaker with soft rounded strokes */
+.sound-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.sound-icon__speaker {
+  fill: var(--color-honey);
+  stroke: var(--color-honey-dark);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.sound-icon__wave {
+  fill: none;
+  stroke: var(--color-honey-dark);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* Show the "on" or "off" icon depending on the button's pressed state */
+[aria-pressed="true"] .sound-icon--off,
+[aria-pressed="false"] .sound-icon--on {
+  display: none;
+}
+
+/* Skip link: hidden until focused */
+.skip-link {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-ink);
+  color: var(--color-paper);
+  border-radius: var(--radius-sm);
+  transform: translateY(-200%);
+  z-index: 1000;
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+/* Modal dialogs */
+.modal {
+  margin: auto;
+  width: min(92vw, 440px);
+  color: var(--color-ink);
+}
+
+.modal::backdrop {
+  background: rgba(74, 59, 42, 0.35);
+  backdrop-filter: blur(4px);
+}
+
+.modal[open] {
+  animation: pop-in 350ms var(--ease-bounce);
+}
+
+.modal__emoji {
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.rules {
+  padding: var(--space-4);
+  background: var(--color-cream);
+  border-radius: var(--radius-md);
+}
+
+.rules li {
+  padding-left: var(--space-5);
+  position: relative;
+}
+
+/* Small flower bullet for the rules list */
+.rules li::before {
+  content: "🌸";
+  position: absolute;
+  left: 0;
+}
+
+/* ---------- 5. PAGE LAYOUT ---------- */
+
+/* Header / main / footer stacked with grid so the footer sits at the bottom */
+.page {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100dvh;
+}
+
+.site-header {
+  padding-block: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.title {
+  color: var(--color-honey-dark);
+  text-shadow: 0 3px 0 #fff;
+}
+
+.logo-mark {
+  font-size: 2.5rem;
+  display: inline-block;
+  animation: hover-bob 2.4s ease-in-out infinite;
+}
+
+.site-main {
+  padding-block: var(--space-2) var(--space-5);
+}
+
+.site-footer {
+  padding-block: var(--space-5);
+  border-top: 2px dashed #f0d9a8;
+}
+
+/* ---------- 6. HUD ---------- */
+
+/* Three columns: level | pot | stings */
+.hud {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.pot {
+  width: 64px;
+  height: 64px;
+  overflow: visible;
+}
+
+.pot__body {
+  fill: #fff4dc;
+  stroke: var(--color-honey-dark);
+  stroke-width: 2.5;
+}
+
+.pot__honey {
+  fill: var(--color-honey);
+  transform-box: fill-box;
+  transform-origin: bottom;
+  transform: scaleY(0);
+  transition: transform 450ms var(--ease-bounce);
+}
+
+.pot__rim {
+  fill: var(--color-honey-dark);
+}
+
+.pot__label {
+  font-family: var(--font-display);
+  font-size: 7px;
+  font-weight: 700;
+  fill: var(--color-ink);
+  opacity: 0.6;
+}
+
+/* Wobble the pot when honey is added */
+.pot.is-filling {
+  animation: wobble 400ms ease;
+}
+
+.hearts li {
+  width: 26px;
+  height: 26px;
+  transition: transform 300ms var(--ease-bounce), opacity 300ms ease, filter 300ms ease;
+}
+
+.hearts svg {
+  width: 100%;
+  height: 100%;
+  fill: var(--color-pink);
+  stroke: #e2729e;
+  stroke-width: 1.5;
+}
+
+/* A heart that has been used up by a sting */
+.hearts li.is-lost {
+  opacity: 0.35;
+  filter: grayscale(1);
+  transform: scale(0.8);
+}
+
+/* ---------- 7. GAME SCENE ---------- */
+
+.game {
+  position: relative;
+  width: 100%;
+  height: clamp(380px, 62vh, 620px);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-soft), inset 0 0 0 4px rgba(255, 255, 255, 0.6);
+  background: linear-gradient(var(--color-sky-top), var(--color-sky-bottom) 45%);
+  cursor: none; /* replaced by our custom net cursor */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Every background layer fills the game area */
+.scene,
+.field {
+  position: absolute;
+  inset: 0;
+}
+
+.sun {
+  position: absolute;
+  top: 8%;
+  right: 10%;
+  width: 90px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--color-sun);
+  box-shadow: 0 0 0 18px rgba(255, 224, 138, 0.35), 0 0 80px 30px rgba(255, 224, 138, 0.5);
+}
+
+/* Fluffy clouds made of one box + two pseudo-element bumps */
+.cloud {
+  position: absolute;
+  width: 120px;
+  height: 36px;
+  background: #fff;
+  border-radius: var(--radius-pill);
+  opacity: 0.9;
+  animation: drift linear infinite;
+}
+
+.cloud::before,
+.cloud::after {
+  content: "";
+  position: absolute;
+  background: #fff;
+  border-radius: 50%;
+}
+
+.cloud::before { width: 50px; height: 50px; top: -26px; left: 18px; }
+.cloud::after { width: 64px; height: 64px; top: -36px; left: 48px; }
+
+.cloud--one { top: 14%; animation-duration: 70s; animation-delay: -10s; }
+.cloud--two { top: 26%; transform: scale(0.7); animation-duration: 95s; animation-delay: -50s; }
+.cloud--three { top: 8%; transform: scale(0.5); animation-duration: 120s; animation-delay: -80s; opacity: 0.7; }
+
+.hills {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  bottom: calc(100% - var(--horizon) - 4%);
+  height: 30%;
+}
+
+.hills__back { fill: var(--color-hill-back); }
+.hills__front { fill: var(--color-hill-front); }
+
+/* Ground: lighter at the horizon, darker up close for depth */
+.ground {
+  position: absolute;
+  inset: var(--horizon) 0 0 0;
+  background:
+    radial-gradient(ellipse at 30% 80%, rgba(255, 255, 255, 0.15), transparent 50%),
+    linear-gradient(var(--color-grass-light), var(--color-grass-dark));
+}
+
+/* ---- Flowers ---- */
+/* Each flower is anchored at its stem base; --z (0 far → 1 near) sets height & size */
+.flower {
+  position: absolute;
+  top: calc(var(--horizon) + var(--z) * (100% - var(--horizon)) * 0.95);
+  left: var(--x);
+  width: 40px;
+  height: 90px;
+  transform: translate(-50%, -100%) scale(var(--scale));
+  transform-origin: bottom center;
+  pointer-events: none;
+}
+
+.flower svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: bottom center;
+  animation: sway ease-in-out infinite alternate;
+  animation-duration: var(--sway, 4s);
+}
+
+.flower__stem { stroke: #5a9b3c; stroke-width: 3; fill: none; stroke-linecap: round; }
+.flower__leaf { fill: #6fb04c; }
+.flower__petal { fill: var(--petal); }
+.flower__center { fill: #ffd45c; stroke: #e9a92a; stroke-width: 1.5; }
+
+/* ---- Bees ---- */
+/* Bees are real <button>s so they can be focused and caught by keyboard */
+.bee {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 56px;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  cursor: none;
+  will-change: transform;
+}
+
+.bee__art {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: scaleX(var(--facing, 1));
+  transition: filter 200ms ease;
+}
+
+.bee__body { fill: #ffd23f; stroke: var(--color-ink); stroke-width: 2; }
+.bee__stripe { fill: var(--color-ink); }
+.bee__stinger { fill: var(--color-ink); }
+.bee__eye { fill: var(--color-ink); }
+.bee__shine { fill: #fff; }
+.bee__blush { fill: var(--color-pink); opacity: 0.8; }
+.bee__smile,
+.bee__antenna { fill: none; stroke: var(--color-ink); stroke-width: 2; stroke-linecap: round; }
+.bee__antenna-tip { fill: var(--color-ink); }
+.bee__wing {
+  fill: rgba(255, 255, 255, 0.75);
+  stroke: #9fc7e8;
+  stroke-width: 1.5;
+  transform-box: fill-box;
+  transform-origin: bottom center;
+  animation: flap 120ms ease-in-out infinite alternate;
+}
+.bee__wing--back { animation-delay: -60ms; }
+
+/* Angry bee: warns the player it is about to sting */
+.bee.is-angry .bee__art {
+  filter: hue-rotate(-40deg) saturate(2.2) drop-shadow(0 0 6px rgba(232, 93, 93, 0.9));
+  animation: jitter 90ms linear infinite;
+}
+
+/* Caught bee: shrinks and spins away */
+.bee.is-caught {
+  pointer-events: none;
+}
+
+.bee.is-caught .bee__art {
+  animation: caught 450ms ease-in forwards;
+}
+
+/* Soft oval shadow on the ground beneath each bee (sells the 2.5D look) */
+.bee-shadow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 46px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(40, 70, 20, 0.28);
+  filter: blur(2px);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Floating "+1" text when a bee is caught */
+.float-text {
+  position: absolute;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-lg);
+  color: var(--color-honey-dark);
+  text-shadow: 0 2px 0 #fff;
+  pointer-events: none;
+  z-index: 300;
+  animation: float-up 900ms ease-out forwards;
+}
+
+/* ---- Custom cursor (bee net) ---- */
+.cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 56px;
+  height: 56px;
+  pointer-events: none; /* clicks pass through to bees */
+  z-index: 500;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.cursor.is-visible { opacity: 1; }
+
+.cursor__art {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: 20px 20px;
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.2));
+}
+
+.cursor__handle { stroke: #b07a3c; stroke-width: 5; stroke-linecap: round; }
+.cursor__mesh-bg { fill: rgba(255, 255, 255, 0.45); }
+.cursor__mesh { stroke: rgba(255, 255, 255, 0.9); stroke-width: 1; }
+.cursor__hoop { fill: none; stroke: var(--color-honey-dark); stroke-width: 3.5; }
+
+.cursor.is-swinging .cursor__art { animation: swing 220ms ease-out; }
+.cursor.is-stung .cursor__art { animation: stung 500ms ease-out; }
+.cursor.is-stung .cursor__hoop { stroke: var(--color-danger); }
+
+/* Full-scene red flash on sting */
+.sting-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle, transparent 40%, rgba(232, 93, 93, 0.45));
+  opacity: 0;
+  z-index: 400;
+}
+
+.sting-flash.is-active { animation: flash 450ms ease-out; }
+
+.game.is-shaking { animation: shake 350ms ease; }
+
+/* The meadow is focused by script (not Tab), so it doesn't need a focus ring */
+.game:focus { outline: none; }
+
+/* ---------- 8. ANIMATIONS ---------- */
+@keyframes flap {
+  from { transform: rotate(-18deg) scaleY(1); }
+  to { transform: rotate(14deg) scaleY(0.6); }
+}
+
+@keyframes sway {
+  from { transform: rotate(-4deg); }
+  to { transform: rotate(4deg); }
+}
+
+@keyframes drift {
+  from { left: -160px; }
+  to { left: 110%; }
+}
+
+@keyframes hover-bob {
+  0%, 100% { transform: translateY(0) rotate(-6deg); }
+  50% { transform: translateY(-6px) rotate(6deg); }
+}
+
+@keyframes jitter {
+  0% { transform: scaleX(var(--facing, 1)) translate(1px, 0); }
+  50% { transform: scaleX(var(--facing, 1)) translate(-1px, 1px); }
+  100% { transform: scaleX(var(--facing, 1)) translate(1px, -1px); }
+}
+
+@keyframes caught {
+  0% { transform: scale(1) rotate(0); opacity: 1; }
+  40% { transform: scale(1.25) rotate(-20deg); opacity: 1; }
+  100% { transform: scale(0) rotate(240deg); opacity: 0; }
+}
+
+@keyframes float-up {
+  from { transform: translate(-50%, 0) scale(0.8); opacity: 1; }
+  to { transform: translate(-50%, -60px) scale(1.1); opacity: 0; }
+}
+
+@keyframes swing {
+  0% { transform: rotate(0); }
+  50% { transform: rotate(-25deg) scale(0.92); }
+  100% { transform: rotate(0); }
+}
+
+@keyframes stung {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(18deg) scale(1.15); }
+  40% { transform: rotate(-14deg); }
+  60% { transform: rotate(10deg); }
+  80% { transform: rotate(-6deg); }
+}
+
+@keyframes flash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  50% { transform: translateX(5px); }
+  75% { transform: translateX(-3px); }
+}
+
+@keyframes wobble {
+  0%, 100% { transform: rotate(0) scale(1); }
+  30% { transform: rotate(-8deg) scale(1.08); }
+  60% { transform: rotate(6deg) scale(1.04); }
+}
+
+@keyframes pop-in {
+  from { transform: scale(0.85); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ---------- 9. RESPONSIVE & ACCESSIBILITY TWEAKS ---------- */
+
+/* Small screens: stack the HUD into two rows (pot on top spanning full width) */
+@media (max-width: 560px) {
+  .hud {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hud__item:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .card {
+    padding: var(--space-3) var(--space-4);
+  }
+}
+
+/* Touch screens: the net stays where you last tapped, slightly see-through
+   so it doesn't hide the bees diving at it */
+@media (hover: none) {
+  .cursor.is-visible { opacity: 0.8; }
+}
+
+/* Respect users who prefer less motion: stop decorative animations */
+@media (prefers-reduced-motion: reduce) {
+  .cloud,
+  .flower svg,
+  .logo-mark,
+  .game.is-shaking {
+    animation: none;
+  }
+
+  .bee__wing {
+    animation-duration: 600ms;
+  }
+}
