@@ -30,6 +30,8 @@ const CONFIG = {
   STING_GRACE: 1,         // seconds after a sting when you can't be stung again
   SPAWN_DELAY: 0.7,       // seconds between new bees appearing
   WASP_SHARE: 0.3,        // in wasp chapters, about 3 in 10 new insects are wasps
+  WASP_MAX_SHARE: 0.35,   // …but never more than about a third of the meadow
+  WASP_LIFETIME: [8, 14], // seconds a wasp hangs around before flying off
   QUEEN_EVERY: [14, 22],  // seconds between queen visits (random in this range)
   QUEEN_FIRST: [6, 10],   // seconds before the first queen of a level
   QUEEN_SWOOP: 260,       // how fast the queen flies in (px per second)
@@ -288,6 +290,9 @@ function spawnBee(role) {
   bee.z = rand(0.1, 0.9);
   bee.baseAltitude = rand(70, 170);
   bee.facing = fromLeft ? 1 : -1;
+  // Wasps are meant to be avoided, not clicked, so they leave on their own
+  // after a while. Otherwise they'd pile up and push the bees out.
+  if (isWasp) bee.lifetime = rand(...CONFIG.WASP_LIFETIME);
   pickTarget(bee);
 }
 
@@ -373,6 +378,12 @@ function updateWanderer(bee, dt) {
       }
       bee.altitude = bee.baseAltitude + Math.sin(bee.phase) * 14;
       if (bee.role === 'bee') maybeGetAngry(bee, dt);
+
+      // A wasp whose time is up flies away, making room for a new insect
+      if (bee.role === 'wasp') {
+        bee.lifetime -= dt;
+        if (bee.lifetime <= 0) bee.mode = 'leave';
+      }
       break;
     }
 
@@ -1088,13 +1099,17 @@ function loop(now) {
     state.invulnerable = Math.max(0, state.invulnerable - dt);
     const { features } = state.chapter;
 
-    // Keep the meadow topped up with bees (and wasps, in wasp chapters)
-    const active = state.bees.filter(
+    // Keep the meadow topped up with bees (and some wasps, in wasp chapters)
+    const flying = state.bees.filter(
       (b) => (b.role === 'bee' || b.role === 'wasp') && b.mode !== 'caught' && b.mode !== 'leave'
-    ).length;
+    );
     state.spawnTimer -= dt;
-    if (active < state.settings.beeCount && state.spawnTimer <= 0) {
-      spawnBee(features.wasps && Math.random() < CONFIG.WASP_SHARE ? 'wasp' : 'bee');
+    if (flying.length < state.settings.beeCount && state.spawnTimer <= 0) {
+      // Only add a wasp if there's room: wasps never take over the meadow
+      const wasps = flying.filter((b) => b.role === 'wasp').length;
+      const maxWasps = Math.max(1, Math.floor(state.settings.beeCount * CONFIG.WASP_MAX_SHARE));
+      const addWasp = features.wasps && wasps < maxWasps && Math.random() < CONFIG.WASP_SHARE;
+      spawnBee(addWasp ? 'wasp' : 'bee');
       state.spawnTimer = CONFIG.SPAWN_DELAY;
     }
 
