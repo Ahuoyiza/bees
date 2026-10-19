@@ -650,6 +650,32 @@ button {
   color: #9a8b78;
 }
 
+/* Reached levels are buttons that fill the whole circle */
+.journey-node__btn {
+  position: absolute;
+  inset: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.journey-node:has(.journey-node__btn):hover {
+  transform: translateX(-50%) scale(1.08);
+}
+
+/* The level you picked to start from */
+.journey-node.is-selected {
+  box-shadow: 0 0 0 5px var(--color-paper), 0 0 0 9px var(--color-focus), 0 4px 0 rgba(0, 0, 0, 0.15);
+  animation: none;
+}
+
+.journey-actions {
+  flex-wrap: wrap;
+}
+
 /* Little badge on the corner of a stop: a tick or a lock */
 .journey-node__badge {
   position: absolute;

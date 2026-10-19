@@ -7,7 +7,7 @@
 -- 1. The browser can READ the leaderboard but can never write to any
 --    table directly (row level security + revoked privileges).
 -- 2. The only way in is through three functions:
---      start_run()             → a new game begins, returns a run id
+--      start_run(start_level)  → a new game begins, returns a run id and seed
 --      record_catch(run_id)    → the server adds 1 honey to ITS OWN count
 --      finish_run(run_id, name)→ the server writes ITS count to the board
 --    The game never sends a score, so there is no number to fake.
@@ -15,7 +15,10 @@
 --    runs older than 4 hours, and finishing the same run twice.
 -- 4. Each run gets a random "seed" that decides which levels are sweet,
 --    normal or swarm. The server uses it to work out the level itself.
--- 5. The leaderboard resets every day at midnight UTC. Old scores are kept
+-- 5. Players may start from any level they've reached. The run remembers
+--    its starting level, and the server counts levels up from there.
+--    Ranking is by honey (1 per bee), so starting later gives no advantage.
+-- 6. The leaderboard resets every day at midnight UTC. Old scores are kept
 --    in the table; todays_leaderboard() simply only returns today's.
 -- =========================================================
 
@@ -34,6 +37,11 @@ create table if not exists public.runs (
 -- The seed for this run's random level plan (added for chapters; safe to re-run)
 alter table public.runs
   add column if not exists seed integer not null default floor(random() * 2147483646)::integer;
+
+-- The level this run started from (players can pick any level they've reached)
+alter table public.runs
+  add column if not exists start_level integer not null default 1
+    check (start_level between 1 and 10000);
 
 -- The public leaderboard. Rows are only ever created by finish_run().
 create table if not exists public.leaderboard (
@@ -74,10 +82,12 @@ create policy "Anyone can read the leaderboard"
 
 -- ---------- 3. HELPERS ----------
 
--- The old one-argument version (before chapters) is replaced below
+-- Older versions (before chapters / before choosing a start level) are replaced below
 drop function if exists public.level_for_honey(integer);
+drop function if exists public.level_for_honey(integer, integer);
 
--- Work out which level a run reached from its honey, using the same plan as the game.
+-- Work out which level a run reached from its honey and starting level,
+-- using the same plan as the game.
 -- !! Keep this in sync with levelPlan() in js/chapters.js !!
 --   Levels 1–10:  5, 7, 9 … 23 bees
 --   Levels 11, 21, 31, 41 (new chapters): 25 bees
@@ -85,7 +95,7 @@ drop function if exists public.level_for_honey(integer);
 --     roll < 14  → sweet: 12–15 bees
 --     roll >= 86 → swarm: 30 bees (but never two swarms in a row)
 --     otherwise  → normal: 25 bees
-create or replace function public.level_for_honey(p_honey integer, p_seed integer)
+create or replace function public.level_for_honey(p_honey integer, p_seed integer, p_start_level integer default 1)
 returns integer
 language plpgsql
 immutable
@@ -98,6 +108,7 @@ declare
   prev_kind  text := 'ramp';
   x          bigint;
   roll       integer;
+  first_lvl  integer := greatest(coalesce(p_start_level, 1), 1);
 begin
   loop
     if lvl <= 10 then
@@ -124,6 +135,14 @@ begin
       end if;
     end if;
 
+    -- Levels before the starting level are skipped (but still worked out,
+    -- because "no two swarms in a row" depends on the level before)
+    if lvl < first_lvl then
+      prev_kind := kind;
+      lvl := lvl + 1;
+      continue;
+    end if;
+
     -- Not enough honey to finish this level: this is the level they were on
     exit when total + target > greatest(p_honey, 0);
 
@@ -141,10 +160,12 @@ $$;
 -- "security definer" lets these functions write to the locked tables
 -- on the player's behalf, but only in the ways written here.
 
--- A new game starts: create a run and hand back its id and seed.
--- (Dropped first because it used to return only the id.)
+-- A new game starts (from level 1, or any level the player picked):
+-- create a run and hand back its id and seed.
+-- (Older versions are dropped first because their arguments were different.)
 drop function if exists public.start_run();
-create function public.start_run()
+drop function if exists public.start_run(integer);
+create function public.start_run(p_start_level integer default 1)
 returns jsonb
 language plpgsql
 security definer
@@ -153,7 +174,9 @@ as $$
 declare
   new_run runs%rowtype;
 begin
-  insert into runs default values returning * into new_run;
+  insert into runs (start_level)
+  values (least(greatest(coalesce(p_start_level, 1), 1), 10000))
+  returning * into new_run;
   return jsonb_build_object('id', new_run.id, 'seed', new_run.seed);
 end;
 $$;
@@ -232,7 +255,7 @@ begin
   end if;
 
   insert into leaderboard (run_id, name, honey, level)
-  values (p_run_id, clean_name, r.honey, level_for_honey(r.honey, r.seed));
+  values (p_run_id, clean_name, r.honey, level_for_honey(r.honey, r.seed, r.start_level));
 end;
 $$;
 
@@ -255,18 +278,18 @@ $$;
 -- ---------- 5. WHO MAY CALL WHAT ----------
 
 -- Only the game functions can be called from the browser
-revoke execute on function public.start_run() from public;
+revoke execute on function public.start_run(integer) from public;
 revoke execute on function public.record_catch(uuid) from public;
 revoke execute on function public.finish_run(uuid, text) from public;
 revoke execute on function public.todays_leaderboard() from public;
-revoke execute on function public.level_for_honey(integer, integer) from public;
+revoke execute on function public.level_for_honey(integer, integer, integer) from public;
 
-grant execute on function public.start_run() to anon, authenticated;
+grant execute on function public.start_run(integer) to anon, authenticated;
 grant execute on function public.record_catch(uuid) to anon, authenticated;
 grant execute on function public.finish_run(uuid, text) to anon, authenticated;
 grant execute on function public.todays_leaderboard() to anon, authenticated;
 -- Pure maths with no data access, so it's fine to expose (handy for checking the game)
-grant execute on function public.level_for_honey(integer, integer) to anon, authenticated;
+grant execute on function public.level_for_honey(integer, integer, integer) to anon, authenticated;
 
 
 -- ---------- 6. HOUSEKEEPING (optional, run by hand when you like) ----------

@@ -214,6 +214,8 @@
     </ul>
     <div class="flex justify-center gap-3">
       <button id="start-btn" class="btn btn--primary" type="button" data-default>Start buzzing</button>
+      <!-- Shown once you've reached a level beyond 1: pick where to start -->
+      <button id="start-choose-btn" class="btn btn--ghost" type="button" aria-haspopup="dialog" hidden>Choose a level</button>
     </div>
   </dialog>
 
@@ -260,6 +262,7 @@
 
     <div class="flex justify-center gap-3">
       <button id="restart-btn" class="btn btn--primary" type="button" data-default>Try again</button>
+      <button id="over-choose-btn" class="btn btn--ghost" type="button" aria-haspopup="dialog" hidden>Choose a level</button>
     </div>
   </dialog>
 
@@ -302,13 +305,16 @@
   <!-- Chapters journey map (opened from the header) -->
   <dialog id="chapters-dialog" class="modal modal--journey card text-center" aria-labelledby="chapters-title">
     <h2 id="chapters-title" class="font-display text-xl">Your journey</h2>
-    <p class="text-sm text-soft">Every game starts at level 1. Climb the path to unlock new chapters.</p>
+    <p class="text-sm text-soft">Tap any level you've reached to start from there, then keep climbing.</p>
     <!-- Scrollable map; focusable so keyboard users can scroll it with the arrow keys -->
     <div id="journey-scroll" class="journey-scroll" tabindex="0" role="region" aria-label="Journey map. Scroll to see every chapter.">
       <div id="journey" class="journey"></div>
     </div>
-    <div class="flex justify-center gap-3">
-      <button id="chapters-close" class="btn btn--primary" type="button" data-default autofocus>Back to the meadow</button>
+    <!-- Appears when a level is picked -->
+    <p id="journey-note" class="text-xs text-soft" hidden></p>
+    <div class="flex justify-center gap-3 journey-actions">
+      <button id="chapters-close" class="btn btn--ghost" type="button" data-default autofocus>Back</button>
+      <button id="journey-play" class="btn btn--primary" type="button" hidden>Play from level 1</button>
     </div>
   </dialog>
 

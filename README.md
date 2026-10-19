@@ -12,7 +12,7 @@ Built with plain **HTML, CSS and JavaScript**. There are no frameworks, no build
 2. **Click a bee** to catch it. Each bee adds one honey to your pot.
 3. Fill the pot (the target appears next to it) to finish the level. Each new level needs more bees, and the bees fly faster and sting more often.
 4. A bee that **turns red** is about to dive at your net. Catch it first or move your net away.
-5. **Every 10 levels a new chapter begins**, with a new bee, new flowers and a new challenge. Every game starts at level 1. The **Chapters** button opens a **journey map**: a winding path of level stops that climbs from level 1 at the bottom through each chapter's own little world. Your bee hovers over the furthest level you've reached, finished stops are honey-gold with a tick, and locked ones are greyed with a padlock.
+5. **Every 10 levels a new chapter begins**, with a new bee, new flowers and a new challenge. **Choose where to start:** tap any level you've already reached on the journey map, then **Play from level N**. You can also use **Choose a level** on the start and game-over screens. From there you always climb upwards through every chapter after it, and **Try again** restarts from the level you picked. The **Chapters** button opens the **journey map**: a winding path of level stops that climbs from level 1 at the bottom through each chapter's own little world. Your bee hovers over the furthest level you've reached, finished stops are honey-gold with a tick, and locked ones are greyed with a padlock.
 
    | Chapter | Levels | Bee | Flowers | Challenge |
    |---|---|---|---|---|
@@ -114,6 +114,7 @@ The sky, sun, clouds, hills and grass only use colour tokens such as `--color-sk
 ### Chapters
 - **`chapters.js` holds all the content**, kept separate from the game logic: the chapter list (levels, bee, flowers, challenge, description), the SVG art for every bee and flower, the scenes, and the level plan.
 - **Level plan:** `levelPlan(seed, level)` decides whether a level is sweet, normal or swarm. It uses a small repeatable "random" formula, so the same seed always gives the same plan.
+- **Starting level:** `newGame(level)` asks the server for a run with `start_run(p_start_level)` and waits up to 3 seconds for its seed before starting. The server stores the starting level and counts levels up from there. Starting later gives no leaderboard advantage, because ranking is by honey (1 per bee) and later levels are harder.
 - **Server check:** each online game gets its seed from the server. `level_for_honey()` in `supabase/schema.sql` runs the same formula to work out which level a score really reached. If you change the level rules, change both.
 - **Insects in `game.js`:** each insect has a `role` (`bee`, `wasp`, `queen` or `soldier`) and a `mode` (`fly`, `warn`, `dive`, `chase`, `leave` or `caught`). Each role has its own movement function.
 - **Darkness:** a dark layer with a radial-gradient "hole" that follows the net. Insects fade the further they are from the lantern.

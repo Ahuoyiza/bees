@@ -129,9 +129,10 @@ const Leaderboard = (() => {
 
     // A new game begins: ask the server for a run. Resolves to { id, seed },
     // or null if offline. The seed decides which levels are sweet or swarm.
-    startRun() {
+    // `startLevel` is the level the player chose to start from (1 by default).
+    startRun(startLevel = 1) {
       catchQueue = Promise.resolve();
-      runPromise = rpc('start_run')
+      runPromise = rpc('start_run', startLevel > 1 ? { p_start_level: startLevel } : {})
         // Older database setups returned just the id, so accept both shapes
         .then((run) => (typeof run === 'string' ? { id: run, seed: null } : run))
         .catch(() => null);

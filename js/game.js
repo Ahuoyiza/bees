@@ -48,6 +48,7 @@ const state = {
   plan: null,             // { type: 'ramp' | 'sweet' | 'normal' | 'swarm', target }
   settings: null,         // speed, bee count etc. for this level
   seed: 0,                // decides which levels are sweet / swarm (picked by the server)
+  startLevel: 1,          // the level this game started from (players can pick)
   gameId: 0,              // changes every new game, so late server replies are ignored
   dark: false,
   honey: 0,
@@ -62,6 +63,7 @@ const state = {
   invulnerable: 0,
   queenTimer: 0,
   pendingLevel: null,     // level waiting behind the chapter intro screen
+  journeyPick: null,      // level picked on the journey map (to start a new game from)
   lastTime: 0,
   pointer: { x: -999, y: -999, inside: false },
 };
@@ -617,19 +619,25 @@ function showFloatText(text, x, y, icon = null) {
 /* ---------- 8. LEVEL FLOW ---------- */
 
 // A brand new game: always starts at level 1
-function newGame() {
+// A brand new game, from level 1 or any level the player has already reached.
+// From there you always climb upwards, through the chapters in order.
+async function newGame(fromLevel = 1) {
+  state.running = false;
+  state.startLevel = fromLevel;
   state.totalHoney = 0;
   state.gameId += 1;
-  // A local seed so the game works offline; the server's seed replaces it if it answers.
-  // Seeds only matter from level 11, long after the server has replied.
-  state.seed = Math.floor(Math.random() * 2147483646);
   const gameId = state.gameId;
-  Leaderboard.startRun().then((run) => {
-    if (run && Number.isInteger(run.seed) && state.gameId === gameId && state.level <= 10) {
-      state.seed = run.seed;
-    }
-  });
-  startLevel(1);
+
+  // Ask the server for a run first: its seed decides which levels are sweet or swarm,
+  // and the server needs the same seed to check the level. A local seed is used if
+  // the server is slow or offline, so the game always starts within a few seconds.
+  state.seed = Math.floor(Math.random() * 2147483646);
+  const noAnswer = new Promise((resolve) => setTimeout(() => resolve(null), 3000));
+  const run = await Promise.race([Leaderboard.startRun(fromLevel), noAnswer]);
+  if (state.gameId !== gameId) return; // another game was started meanwhile
+  if (run && Number.isInteger(run.seed)) state.seed = run.seed;
+
+  startLevel(fromLevel);
 }
 
 // Clear the meadow and begin a level
@@ -722,9 +730,14 @@ async function gameOver() {
   state.running = false;
   BeeAudio.gameOver();
 
+  let where = `You reached level ${state.level}`;
+  if (state.startLevel > 1 && state.level > state.startLevel) {
+    where = `You started at level ${state.startLevel} and reached level ${state.level}`;
+  } else if (state.startLevel > 1) {
+    where = `You started at level ${state.startLevel}`;
+  }
   overSummary.textContent =
-    `You reached level ${state.level} (chapter ${state.chapter.number}) ` +
-    `and collected ${state.totalHoney} honey in total.`;
+    `${where} (chapter ${state.chapter.number}) and collected ${state.totalHoney} honey in total.`;
 
   // Personal best lives on this device and never resets
   const { isNew, best } = Leaderboard.savePersonalBest({
@@ -748,6 +761,8 @@ async function gameOver() {
       ? 'Your score goes on today\'s leaderboard for everyone. No account needed.'
       : 'Offline right now, so this is saved on this device only.';
   }
+
+  updateChooseButtons();
 
   // The dialog focuses its first control: the name box if shown, otherwise "Try again"
   setTimeout(() => overDialog.showModal(), 450);
@@ -857,12 +872,16 @@ function renderJourney() {
         ? `<span class="journey-node__bee">${Chapters.beeSVG(chapter.bee === 'mixed' ? 'honey' : chapter.bee)}</span>`
         : '';
       const badge = stopState === 'locked' ? Icons.svg('lock') : stopState === 'done' ? Icons.svg('check') : '';
+      // Levels you've reached are buttons: pick one to start a game from there
+      const number = stopState === 'locked'
+        ? `<span class="journey-node__num">${level}</span><span class="visually-hidden">, ${spoken}</span>`
+        : `<button class="journey-node__btn" type="button" data-level="${level}" aria-pressed="false"
+             aria-label="Level ${level}, ${spoken}. Start from here">${level}</button>`;
       return `
         <li class="journey-node is-${stopState}" style="left:${x.toFixed(2)}%;bottom:${(stopY - 24).toFixed(0)}px">
           ${marker}
-          <span class="journey-node__num">${level}</span>
+          ${number}
           <span class="journey-node__badge">${badge}</span>
-          <span class="visually-hidden">, ${spoken}</span>
         </li>`;
     }).join('');
 
@@ -895,6 +914,9 @@ function renderJourney() {
       <p class="font-display text-lg">More chapters coming soon</p>
       <p class="text-sm text-soft">New bees, flowers and challenges are on their way.</p>
     </div>`;
+
+  // Nothing picked yet each time the map opens
+  selectJourneyLevel(null);
 
   // Scroll so your current stop is in the middle
   const current = points[reached - 1];
@@ -1039,6 +1061,27 @@ function updateFullscreenState() {
   const on = Boolean(fullscreenElement()) || isFallbackFullscreen();
   playArea.classList.toggle('is-fullscreen', on);
   fullscreenBtn.setAttribute('aria-pressed', String(on));
+}
+
+// Mark one level stop as picked and show the "Play from level N" button
+function selectJourneyLevel(level) {
+  state.journeyPick = level;
+  $('journey').querySelectorAll('.journey-node__btn').forEach((button) => {
+    const picked = Number(button.dataset.level) === level;
+    button.setAttribute('aria-pressed', String(picked));
+    button.parentElement.classList.toggle('is-selected', picked);
+  });
+
+  const playBtn = $('journey-play');
+  playBtn.hidden = !level;
+  $('journey-note').hidden = !level;
+  if (level) {
+    playBtn.textContent = `Play from level ${level}`;
+    // `running` stays true while a menu pauses the game, so this means "mid-game"
+    $('journey-note').textContent = state.running
+      ? 'This starts a new game from there. You\'ll climb up through every chapter after it.'
+      : 'You\'ll climb up from there through every chapter after it.';
+  }
 }
 
 /* ---------- 9. HUD UPDATES ---------- */
@@ -1206,9 +1249,10 @@ chapterDialog.addEventListener('close', () => {
   }
 });
 
+// Try again: start over from the same level this game started from
 $('restart-btn').addEventListener('click', () => {
   overDialog.close();
-  newGame();
+  newGame(state.startLevel);
 });
 
 // Pressing Escape on a dialog does the same as its main button, so the game never gets stuck
@@ -1259,14 +1303,43 @@ $('board-btn').addEventListener('click', async () => {
 $('board-close').addEventListener('click', () => boardDialog.close());
 boardDialog.addEventListener('close', resumeAfterMenu);
 
-$('chapters-btn').addEventListener('click', () => {
+// The journey map doubles as a level picker. It opens from the header,
+// the start screen and the game-over screen.
+function openJourney() {
   state.paused = true;
   const scrollToCurrent = renderJourney();
   chaptersDialog.showModal();
   scrollToCurrent(); // after opening, so the map has its real size
-});
+}
+
+$('chapters-btn').addEventListener('click', openJourney);
+$('start-choose-btn').addEventListener('click', openJourney);
+$('over-choose-btn').addEventListener('click', openJourney);
 $('chapters-close').addEventListener('click', () => chaptersDialog.close());
 chaptersDialog.addEventListener('close', resumeAfterMenu);
+
+// Tapping a level stop picks it (clicks are handled once, for every stop)
+$('journey').addEventListener('click', (event) => {
+  const stop = event.target.closest('.journey-node__btn');
+  if (stop) selectJourneyLevel(Number(stop.dataset.level));
+});
+
+// Play from the picked level: close every open screen and start a new game there
+$('journey-play').addEventListener('click', () => {
+  const level = state.journeyPick;
+  if (!level) return;
+  state.pendingLevel = null; // don't let a chapter intro start its own level
+  document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
+  BeeAudio.start();
+  newGame(level);
+});
+
+// Show "Choose a level" on the start and game-over screens once there's a choice to make
+function updateChooseButtons() {
+  const hasChoice = getFurthestLevel() > 1;
+  $('start-choose-btn').hidden = !hasChoice;
+  $('over-choose-btn').hidden = !hasChoice;
+}
 
 // Full screen button (works everywhere thanks to the fill-the-window fallback)
 fullscreenBtn.addEventListener('pointerdown', (event) => event.stopPropagation()); // don't swing the net
@@ -1302,6 +1375,7 @@ document.addEventListener('visibilitychange', () => {
 
 // Build the scene, draw the page's icons and show the welcome screen
 Icons.fill();
+updateChooseButtons();
 applyScene(1);
 buildHearts();
 updateLevel();
