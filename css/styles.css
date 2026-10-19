@@ -101,6 +101,11 @@ ul {
   list-style: none;
 }
 
+/* Make sure the hidden attribute always wins over display rules */
+[hidden] {
+  display: none !important;
+}
+
 button {
   font: inherit;
   color: inherit;
@@ -240,6 +245,135 @@ button {
 [aria-pressed="true"] .sound-icon--off,
 [aria-pressed="false"] .sound-icon--on {
   display: none;
+}
+
+/* Generic button icon (trophy, full screen) in the same honey style */
+.btn-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.btn-icon__fill {
+  fill: var(--color-honey);
+  stroke: var(--color-honey-dark);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.btn-icon__line {
+  fill: none;
+  stroke: var(--color-honey-dark);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Round icon-only button */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 2px solid #f3dfb4;
+  border-radius: 50%;
+  background: rgba(255, 253, 247, 0.85);
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.icon-btn:hover {
+  transform: scale(1.08);
+}
+
+/* Form fields */
+.label {
+  display: block;
+  font-weight: 800;
+  font-size: var(--fs-sm);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  font: inherit;
+  color: var(--color-ink);
+  background: var(--color-cream);
+  border: 2px solid #f0d9a8;
+  border-radius: var(--radius-pill);
+}
+
+.input:focus-visible {
+  border-color: var(--color-focus);
+}
+
+/* Name form on the game-over screen */
+.score-form {
+  padding: var(--space-4);
+  background: var(--color-cream);
+  border-radius: var(--radius-md);
+}
+
+.score-form > * + * {
+  margin-top: var(--space-2);
+}
+
+.new-high {
+  color: var(--color-honey-dark);
+  animation: pop-in 400ms var(--ease-bounce);
+}
+
+/* Leaderboard table */
+.board {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.board th,
+.board td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+}
+
+.board th {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-soft);
+  border-bottom: 2px dashed #f0d9a8;
+}
+
+/* Number columns line up on the right */
+.board .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.board tbody tr:nth-child(odd) {
+  background: var(--color-cream);
+}
+
+/* Gold, silver and bronze medals for the top three */
+.board .rank {
+  width: 2.5rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+/* The score you just saved */
+.board tr.is-new {
+  background: #ffe7a8;
+  font-weight: 800;
+}
+
+.board-empty {
+  padding: var(--space-5);
+  background: var(--color-cream);
+  border-radius: var(--radius-md);
 }
 
 /* Skip link: hidden until focused */
@@ -641,6 +775,54 @@ button {
 
 /* The meadow is focused by script (not Tab), so it doesn't need a focus ring */
 .game:focus { outline: none; }
+
+/* ---- Full screen ---- */
+.fullscreen-btn {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 600; /* above the bees and the net */
+}
+
+/* Show the "enter" or "exit" icon depending on the pressed state */
+.fullscreen-btn[aria-pressed="true"] .fs-icon--enter,
+.fullscreen-btn[aria-pressed="false"] .fs-icon--exit {
+  display: none;
+}
+
+/* In full screen (real or fallback), the HUD sits on top and the meadow fills the rest.
+   JavaScript adds .is-fullscreen in both cases. */
+.play-area.is-fullscreen {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: var(--space-4);
+  width: 100%;
+  height: 100%;
+  padding: var(--space-4);
+  background: radial-gradient(circle at top, var(--color-cream), #fbe9c4);
+  overflow: hidden;
+}
+
+.play-area.is-fullscreen > * + * {
+  margin-top: 0; /* grid gap handles spacing instead of .stack */
+}
+
+.play-area.is-fullscreen .game {
+  height: 100%;
+}
+
+/* Fallback: pin the play area over the whole browser window */
+.play-area.is-fullscreen-fallback {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  z-index: 900;
+}
+
+/* Stop the page behind from scrolling while in fallback full screen */
+.no-scroll {
+  overflow: hidden;
+}
 
 /* ---- Scenes: each level gets its own look ----
    The scene layers above only use colour tokens, so a scene is

@@ -9,6 +9,7 @@
    6. Bees: create, move, draw
    7. Player actions: catching & getting stung
    8. Level flow (start, complete, game over)
+      + Leaderboard table and full screen helpers
    9. HUD updates
    10. Main game loop
    11. Event listeners & start-up
@@ -44,6 +45,7 @@ const state = {
   totalHoney: 0,
   stings: 0,
   running: false,
+  paused: false,         // true while the leaderboard is open mid-game
   settings: levelSettings(1),
   bees: [],
   nextBeeId: 0,
@@ -76,6 +78,15 @@ const overDialog = $('over-dialog');
 const levelSummary = $('level-summary');
 const overSummary = $('over-summary');
 const soundToggle = $('sound-toggle');
+
+const scoreForm = $('score-form');
+const playerName = $('player-name');
+const overBoard = $('over-board');
+const boardDialog = $('board-dialog');
+const boardList = $('board-list');
+
+const playArea = $('play-area');
+const fullscreenBtn = $('fullscreen-btn');
 
 /* ---------- 4. HELPERS ---------- */
 const rand = (min, max) => min + Math.random() * (max - min);
@@ -374,7 +385,7 @@ function maybeGetAngry(bee, dt) {
 
 // The player caught a bee
 function catchBee(bee) {
-  if (!state.running || bee.mode === 'caught' || bee.mode === 'leave') return;
+  if (!state.running || state.paused || bee.mode === 'caught' || bee.mode === 'leave') return;
 
   bee.mode = 'caught';
   bee.el.classList.remove('is-angry');
@@ -465,7 +476,7 @@ function completeLevel() {
   setTimeout(() => levelDialog.showModal(), 500);
 }
 
-function gameOver() {
+async function gameOver() {
   state.running = false;
   BeeAudio.gameOver();
 
@@ -481,7 +492,138 @@ function gameOver() {
   overSummary.textContent =
     `You reached level ${state.level} and collected ${state.totalHoney} honey in total. ` +
     `Best level: ${best}.`;
+
+  // Leaderboard: if this run makes the top 10, ask for a name
+  overBoard.hidden = true;
+  scoreForm.hidden = !(await Leaderboard.qualifies(state.totalHoney));
+  if (!scoreForm.hidden) playerName.value = Leaderboard.getSavedName();
+
+  // The dialog focuses its first control: the name box if shown, otherwise "Try again"
   setTimeout(() => overDialog.showModal(), 450);
+}
+
+/* ---------- LEADERBOARD ---------- */
+const MEDALS = ['🥇', '🥈', '🥉'];
+
+// Draw the top 10 as a table inside `container`, highlighting one entry if given
+async function renderBoard(container, highlightId = null) {
+  const scores = await Leaderboard.getTop();
+  container.replaceChildren();
+
+  if (!scores.length) {
+    const empty = document.createElement('p');
+    empty.className = 'board-empty text-sm text-soft';
+    empty.textContent = 'No scores yet. Catch some bees and be the first!';
+    container.appendChild(empty);
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'board';
+  table.innerHTML = `
+    <caption class="visually-hidden">Top ${Leaderboard.MAX_ENTRIES} scores on this device</caption>
+    <thead>
+      <tr>
+        <th scope="col">Rank</th>
+        <th scope="col">Name</th>
+        <th scope="col" class="num">Honey</th>
+        <th scope="col" class="num">Level</th>
+      </tr>
+    </thead>`;
+
+  const tbody = document.createElement('tbody');
+  scores.forEach((score, index) => {
+    const row = document.createElement('tr');
+    if (score.id === highlightId) {
+      row.className = 'is-new';
+      row.setAttribute('aria-current', 'true');
+    }
+
+    // Rank is a row header so screen readers announce it with each cell
+    const rankCell = document.createElement('th');
+    rankCell.scope = 'row';
+    rankCell.className = 'rank';
+    rankCell.textContent = MEDALS[index] || String(index + 1);
+    rankCell.setAttribute('aria-label', `Rank ${index + 1}`);
+
+    // textContent (not innerHTML) so a name can never inject HTML
+    const cells = [
+      [score.name, ''],
+      [score.honey, 'num'],
+      [score.level, 'num'],
+    ].map(([value, className]) => {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      if (className) cell.className = className;
+      return cell;
+    });
+
+    row.append(rankCell, ...cells);
+    tbody.appendChild(row);
+  });
+
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+/* ---------- FULL SCREEN ----------
+   Two ways to go full screen:
+   1. The browser's Fullscreen API (true full screen, hides the browser UI).
+   2. A fallback that makes the play area fill the browser window. Used when
+      the API is missing or refused (iPhone Safari, embedded previews, iframes).
+   Both add the .is-fullscreen class, which the CSS uses for the layout. */
+
+function fullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement;
+}
+
+function isFallbackFullscreen() {
+  return playArea.classList.contains('is-fullscreen-fallback');
+}
+
+async function enterFullscreen() {
+  const request = playArea.requestFullscreen || playArea.webkitRequestFullscreen;
+  try {
+    if (!request) throw new Error('Fullscreen API not available');
+    // Some browsers never answer the request, so give up after one second
+    const timeout = new Promise((resolve) => setTimeout(resolve, 1000));
+    await Promise.race([request.call(playArea), timeout]);
+  } catch (error) {
+    /* refused: handled below */
+  }
+
+  // Some browsers say yes but never actually go full screen, so check for real.
+  // If it didn't happen, fill the window instead.
+  if (!fullscreenElement()) {
+    playArea.classList.add('is-fullscreen-fallback');
+    document.body.classList.add('no-scroll');
+  }
+  updateFullscreenState();
+}
+
+function exitFullscreen() {
+  if (fullscreenElement()) {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    Promise.resolve(exit.call(document)).catch(() => {});
+  }
+  playArea.classList.remove('is-fullscreen-fallback');
+  document.body.classList.remove('no-scroll');
+  updateFullscreenState();
+}
+
+function toggleFullscreen() {
+  if (fullscreenElement() || isFallbackFullscreen()) {
+    exitFullscreen();
+  } else {
+    enterFullscreen();
+  }
+}
+
+// Keep the class, the button state and the label in sync
+function updateFullscreenState() {
+  const on = Boolean(fullscreenElement()) || isFallbackFullscreen();
+  playArea.classList.toggle('is-fullscreen', on);
+  fullscreenBtn.setAttribute('aria-pressed', String(on));
 }
 
 /* ---------- 9. HUD UPDATES ---------- */
@@ -530,7 +672,7 @@ function loop(now) {
   const dt = Math.min((now - state.lastTime) / 1000, 0.05);
   state.lastTime = now;
 
-  if (state.running) {
+  if (state.running && !state.paused) {
     state.stingCooldown = Math.max(0, state.stingCooldown - dt);
 
     // Keep the meadow topped up with bees
@@ -609,11 +751,56 @@ $('restart-btn').addEventListener('click', () => {
 });
 
 // Pressing Escape on a dialog does the same as its main button, so the game never gets stuck
-[startDialog, levelDialog, overDialog].forEach((dialog) => {
+[startDialog, levelDialog, overDialog, boardDialog].forEach((dialog) => {
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault();
-    dialog.querySelector('.btn--primary').click();
+    dialog.querySelector('[data-default]').click();
   });
+});
+
+// Save a high score from the game-over screen, then show where it landed
+scoreForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  Leaderboard.setSavedName(playerName.value);
+  const id = await Leaderboard.add({
+    name: playerName.value,
+    honey: state.totalHoney,
+    level: state.level,
+  });
+
+  scoreForm.hidden = true;
+  await renderBoard(overBoard, id);
+  overBoard.hidden = false;
+  announce('Score saved to the leaderboard.');
+  $('restart-btn').focus();
+});
+
+// Leaderboard button in the header: pause the game while it's open
+$('board-btn').addEventListener('click', async () => {
+  state.paused = true;
+  await renderBoard(boardList);
+  boardDialog.showModal();
+});
+
+$('board-close').addEventListener('click', () => boardDialog.close());
+
+boardDialog.addEventListener('close', () => {
+  state.paused = false;
+  state.lastTime = performance.now();
+});
+
+// Full screen button (works everywhere thanks to the fill-the-window fallback)
+fullscreenBtn.addEventListener('pointerdown', (event) => event.stopPropagation()); // don't swing the net
+fullscreenBtn.addEventListener('click', toggleFullscreen);
+document.addEventListener('fullscreenchange', updateFullscreenState);
+document.addEventListener('webkitfullscreenchange', updateFullscreenState);
+
+// Escape leaves the fallback mode (real full screen handles Escape by itself).
+// Skip it when a dialog is open, because Escape belongs to the dialog then.
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && isFallbackFullscreen() && !document.querySelector('dialog[open]')) {
+    exitFullscreen();
+  }
 });
 
 // Sound on/off

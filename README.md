@@ -15,6 +15,10 @@ Built with plain **HTML, CSS and JavaScript**. There are no frameworks, no build
 5. Each level takes place in a new scene: **Sunny Meadow → Golden Sunset → Lavender Fields → Moonlit Garden → Cherry Blossom**, then the cycle repeats.
 6. Get stung **4 times** before your pot is full and the game is over.
 
+**Leaderboard:** when a game ends with a top-10 score, you're asked for a name. The **Leaderboard** button in the header shows the top 10 and pauses the game while it's open. Scores are saved in your browser on this device only, with no account or sign-in.
+
+**Full screen:** press the corner button at the top left of the meadow. Press it again or press `Esc` to leave. Where the browser blocks true full screen, as iPhone Safari does, the game fills the browser window instead.
+
 **Phone / tablet:** tap a bee to catch it. Your net stays where you last tapped, and angry bees dive at that spot, so keep tapping around the meadow.
 
 **Keyboard:** every bee is a real button. Press `Tab` to move between bees and `Enter` or `Space` to catch one.
@@ -52,6 +56,7 @@ bees/
 │   └── styles.css  # Design tokens, utility classes, components, scene and animations
 ├── js/
 │   ├── audio.js    # Cozy ambience and sound effects (Web Audio API)
+│   ├── leaderboard.js # Top-10 scores saved in localStorage
 │   └── game.js     # Game state, bees, catching, stings, levels and the main loop
 ├── .gitignore
 └── README.md
@@ -92,6 +97,14 @@ The sky, sun, clouds, hills and grass only use colour tokens such as `--color-sk
 - The cursor is a hand-drawn SVG **bee net** that follows the mouse. It swings when you click and shakes red when you're stung.
 - Your best level is saved in `localStorage` when it's available.
 - **`audio.js`** creates all sound with the **Web Audio API**: a warm chord pad, a random pentatonic music-box melody with echo, a faint bee hum and occasional bird chirps, plus sound effects for catching, stinging, levelling up and game over.
+
+### Leaderboard
+- `leaderboard.js` stores the top 10 scores in `localStorage`, ranked by total honey and then by level. It also remembers the last name you typed.
+- Names are always inserted with `textContent`, so a name can't inject HTML into the page.
+- Every leaderboard function is `async`. To move to a shared online leaderboard later, for example with Supabase, only `leaderboard.js` needs to change.
+
+### Full screen
+The HUD and meadow sit inside `#play-area`. The button asks the browser's Fullscreen API to make that element full screen, using the `webkit` versions where needed. Some browsers refuse, never answer, or say yes without actually going full screen. In those cases the game uses a **fallback**: it pins the play area over the whole window with `position: fixed`. Both modes add the `.is-fullscreen` class, and a CSS grid then puts the HUD on top and lets the meadow fill the rest. Dialogs still appear on top, because they open in the browser's top layer.
 
 ---
 
