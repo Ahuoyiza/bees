@@ -18,6 +18,8 @@
   --color-sky-top: #bfe4ff;
   --color-sky-bottom: #fff1d6;
   --color-sun: #ffe08a;
+  --color-sun-glow: rgba(255, 224, 138, 0.45);
+  --color-cloud: #ffffff;
   --color-hill-back: #cde9a6;
   --color-hill-front: #a9d77f;
   --color-grass-light: #9fd170;
@@ -429,7 +431,8 @@ button {
   aspect-ratio: 1;
   border-radius: 50%;
   background: var(--color-sun);
-  box-shadow: 0 0 0 18px rgba(255, 224, 138, 0.35), 0 0 80px 30px rgba(255, 224, 138, 0.5);
+  box-shadow: 0 0 0 18px var(--color-sun-glow), 0 0 80px 30px var(--color-sun-glow);
+  transition: background 600ms ease, box-shadow 600ms ease;
 }
 
 /* Fluffy clouds made of one box + two pseudo-element bumps */
@@ -437,7 +440,7 @@ button {
   position: absolute;
   width: 120px;
   height: 36px;
-  background: #fff;
+  background: var(--color-cloud);
   border-radius: var(--radius-pill);
   opacity: 0.9;
   animation: drift linear infinite;
@@ -447,7 +450,7 @@ button {
 .cloud::after {
   content: "";
   position: absolute;
-  background: #fff;
+  background: var(--color-cloud);
   border-radius: 50%;
 }
 
@@ -639,6 +642,123 @@ button {
 /* The meadow is focused by script (not Tab), so it doesn't need a focus ring */
 .game:focus { outline: none; }
 
+/* ---- Scenes: each level gets its own look ----
+   The scene layers above only use colour tokens, so a scene is
+   just a new set of token values on the game element. */
+
+.game[data-scene="sunset"] {
+  --color-sky-top: #ff9f80;
+  --color-sky-bottom: #ffe0b0;
+  --color-sun: #ff7b54;
+  --color-sun-glow: rgba(255, 140, 90, 0.4);
+  --color-cloud: #ffd9c7;
+  --color-hill-back: #e8c27c;
+  --color-hill-front: #c9b45e;
+  --color-grass-light: #b9c467;
+  --color-grass-dark: #869c45;
+}
+
+.game[data-scene="lavender"] {
+  --color-sky-top: #cfc6ff;
+  --color-sky-bottom: #fbe8ff;
+  --color-sun: #fff4b8;
+  --color-sun-glow: rgba(255, 244, 184, 0.5);
+  --color-cloud: #fdf7ff;
+  --color-hill-back: #c8b6ef;
+  --color-hill-front: #a993dd;
+  --color-grass-light: #a9cf86;
+  --color-grass-dark: #77a65c;
+}
+
+.game[data-scene="night"] {
+  --color-sky-top: #1d2550;
+  --color-sky-bottom: #4b4f8e;
+  --color-sun: #f6f1d3; /* the moon */
+  --color-sun-glow: rgba(246, 241, 211, 0.18);
+  --color-cloud: #6a6fa8;
+  --color-hill-back: #33476b;
+  --color-hill-front: #2a3f5c;
+  --color-grass-light: #3f6e55;
+  --color-grass-dark: #284a3a;
+}
+
+.game[data-scene="blossom"] {
+  --color-sky-top: #ffd1e6;
+  --color-sky-bottom: #fff4f8;
+  --color-sun: #fff0a8;
+  --color-sun-glow: rgba(255, 240, 168, 0.45);
+  --color-cloud: #ffffff;
+  --color-hill-back: #f6c3d7;
+  --color-hill-front: #b8dc8c;
+  --color-grass-light: #a6d67e;
+  --color-grass-dark: #74b356;
+}
+
+/* Night: the sun becomes a smaller moon with a shaded edge */
+.game[data-scene="night"] .sun {
+  width: 64px;
+  box-shadow: inset -14px -6px 0 0 #e2dcb4, 0 0 60px 20px var(--color-sun-glow);
+}
+
+/* Stars: dots drawn with gradients, only visible at night */
+.stars {
+  position: absolute;
+  inset: 0 0 50% 0;
+  opacity: 0;
+  background-image:
+    radial-gradient(2px 2px at 10% 20%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 22% 60%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 35% 12%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 48% 40%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 58% 18%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 66% 55%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 74% 30%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 90% 65%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 5% 70%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 40% 75%, #fff 50%, transparent 51%);
+  transition: opacity 600ms ease;
+}
+
+.game[data-scene="night"] .stars {
+  opacity: 1;
+  animation: twinkle 3s ease-in-out infinite alternate;
+}
+
+/* Falling petals: only visible in the blossom scene */
+.falling-petals span {
+  position: absolute;
+  top: -20px;
+  width: 12px;
+  height: 9px;
+  border-radius: 80% 0 80% 0;
+  background: #ffb3cf;
+  opacity: 0;
+  z-index: 260;
+}
+
+.game[data-scene="blossom"] .falling-petals span {
+  opacity: 0.9;
+  animation: petal-fall linear infinite;
+}
+
+/* Spread the petals out: different start positions, speeds and delays */
+.falling-petals span:nth-child(1)  { left: 5%;  animation-duration: 9s;  animation-delay: -1s; }
+.falling-petals span:nth-child(2)  { left: 15%; animation-duration: 12s; animation-delay: -6s; }
+.falling-petals span:nth-child(3)  { left: 27%; animation-duration: 10s; animation-delay: -3s; }
+.falling-petals span:nth-child(4)  { left: 38%; animation-duration: 13s; animation-delay: -9s; }
+.falling-petals span:nth-child(5)  { left: 49%; animation-duration: 11s; animation-delay: -2s; }
+.falling-petals span:nth-child(6)  { left: 60%; animation-duration: 9s;  animation-delay: -7s; }
+.falling-petals span:nth-child(7)  { left: 70%; animation-duration: 14s; animation-delay: -4s; }
+.falling-petals span:nth-child(8)  { left: 80%; animation-duration: 10s; animation-delay: -8s; }
+.falling-petals span:nth-child(9)  { left: 88%; animation-duration: 12s; animation-delay: -5s; }
+.falling-petals span:nth-child(10) { left: 95%; animation-duration: 11s; animation-delay: -10s; }
+
+/* Short fade when a new scene appears */
+.game.is-changing-scene .scene,
+.game.is-changing-scene .field {
+  animation: scene-in 700ms ease;
+}
+
 /* ---------- 8. ANIMATIONS ---------- */
 @keyframes flap {
   from { transform: rotate(-18deg) scaleY(1); }
@@ -709,6 +829,22 @@ button {
   60% { transform: rotate(6deg) scale(1.04); }
 }
 
+@keyframes twinkle {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+@keyframes petal-fall {
+  0% { transform: translate(0, 0) rotate(0); }
+  50% { transform: translate(-30px, 300px) rotate(180deg); }
+  100% { transform: translate(20px, 700px) rotate(360deg); }
+}
+
+@keyframes scene-in {
+  from { opacity: 0; filter: blur(6px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
 @keyframes pop-in {
   from { transform: scale(0.85); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
@@ -742,6 +878,10 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .cloud,
   .flower svg,
+  .stars,
+  .falling-petals span,
+  .game.is-changing-scene .scene,
+  .game.is-changing-scene .field,
   .logo-mark,
   .game.is-shaking {
     animation: none;

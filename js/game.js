@@ -62,6 +62,7 @@ const flashEl = $('sting-flash');
 const announcer = $('announcer');
 
 const levelValue = $('level-value');
+const sceneName = $('scene-name');
 const honeyValue = $('honey-value');
 const honeyTarget = $('honey-target');
 const honeyMeter = $('honey-meter');
@@ -113,7 +114,23 @@ function replayClass(el, className) {
 }
 
 /* ---------- 5. SCENE BUILDING ---------- */
-const PETAL_COLOURS = ['#ff9ec4', '#c9a7ff', '#ffb38a', '#ffffff', '#ff7f9e', '#9fd3ff'];
+
+/*
+  Scenes: each level uses the next scene in this list, looping back to the
+  start after the last one. `id` matches a [data-scene] theme in the CSS
+  (sky, hills and grass colours); `petals` sets the flower colours.
+*/
+const SCENES = [
+  { id: 'meadow',   name: 'Sunny Meadow',    petals: ['#ff9ec4', '#c9a7ff', '#ffb38a', '#ffffff', '#ff7f9e', '#9fd3ff'] },
+  { id: 'sunset',   name: 'Golden Sunset',   petals: ['#ff8a5c', '#ffc94d', '#ff6f61', '#ffe08a', '#f7a072'] },
+  { id: 'lavender', name: 'Lavender Fields', petals: ['#b79cf5', '#9a7ee6', '#d8c8ff', '#f3c4ff', '#ffffff'] },
+  { id: 'night',    name: 'Moonlit Garden',  petals: ['#cfe3ff', '#ffffff', '#b7f0e6', '#ffd1f0', '#a8c4ff'] },
+  { id: 'blossom',  name: 'Cherry Blossom',  petals: ['#ffb3cf', '#ff8fb8', '#ffd6e6', '#ffffff', '#f7a8c8'] },
+];
+
+function sceneForLevel(level) {
+  return SCENES[(level - 1) % SCENES.length];
+}
 
 // Builds the SVG markup for one cute flower
 function flowerSVG(petalCount) {
@@ -136,7 +153,10 @@ function flowerSVG(petalCount) {
 }
 
 // Scatter flowers across the meadow; nearer flowers are bigger and drawn on top
-function buildFlowers() {
+function buildFlowers(palette) {
+  // Clear the old flowers first (bees live in the same layer, so only remove flowers)
+  fieldEl.querySelectorAll('.flower').forEach((flower) => flower.remove());
+
   const fragment = document.createDocumentFragment();
   for (let i = 0; i < CONFIG.FLOWER_COUNT; i++) {
     const z = Math.random();
@@ -146,13 +166,24 @@ function buildFlowers() {
     flower.style.setProperty('--x', `${rand(2, 98)}%`);
     flower.style.setProperty('--z', z.toFixed(3));
     flower.style.setProperty('--scale', (0.45 + z * 0.9).toFixed(2));
-    flower.style.setProperty('--petal', pick(PETAL_COLOURS));
+    flower.style.setProperty('--petal', pick(palette));
     flower.style.setProperty('--sway', `${rand(3, 5.5).toFixed(1)}s`);
     flower.style.zIndex = Math.round(z * 100);
     flower.innerHTML = flowerSVG(pick([5, 6, 7]));
     fragment.appendChild(flower);
   }
   fieldEl.appendChild(fragment);
+}
+
+// Switch the meadow to the scene for this level: new colours, new flowers, a soft fade
+function applyScene(level) {
+  const scene = sceneForLevel(level);
+  if (gameEl.dataset.scene !== scene.id || !fieldEl.querySelector('.flower')) {
+    gameEl.dataset.scene = scene.id;
+    buildFlowers(scene.petals);
+    replayClass(gameEl, 'is-changing-scene');
+  }
+  sceneName.textContent = scene.name;
 }
 
 /* ---------- 6. BEES ---------- */
@@ -412,6 +443,7 @@ function startLevel(level) {
   state.stingCooldown = 1.5; // a short grace period at the start
   [...state.bees].forEach(removeBee);
 
+  applyScene(level);
   updateLevel();
   updateHoney();
   updateHearts();
@@ -419,7 +451,7 @@ function startLevel(level) {
   state.running = true;
   state.lastTime = performance.now();
   gameEl.focus({ preventScroll: true });
-  announce(`Level ${level}. Catch ${state.settings.target} bees.`);
+  announce(`Level ${level}, ${sceneForLevel(level).name}. Catch ${state.settings.target} bees.`);
 }
 
 function completeLevel() {
@@ -427,7 +459,8 @@ function completeLevel() {
   BeeAudio.levelUp();
   levelSummary.textContent =
     `You caught ${state.settings.target} bees on level ${state.level}. ` +
-    `Next up: level ${state.level + 1}, with faster, grumpier bees!`;
+    `Next up: level ${state.level + 1} in the ${sceneForLevel(state.level + 1).name}, ` +
+    `with faster, grumpier bees!`;
   // Let the catch animation finish before the dialog appears
   setTimeout(() => levelDialog.showModal(), 500);
 }
@@ -602,7 +635,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // Build the scene and show the welcome screen
-buildFlowers();
+applyScene(1);
 buildHearts();
 updateHoney();
 updateHearts();

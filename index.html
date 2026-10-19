@@ -56,6 +56,7 @@
       <div class="hud__item flex flex-col items-start gap-1">
         <h2 class="text-xs text-soft upper">Level</h2>
         <p class="font-display text-xl" id="level-value">1</p>
+        <p class="text-xs text-soft" id="scene-name">Sunny Meadow</p>
       </div>
 
       <!-- Honey pot: an SVG pot whose honey rises as you catch bees -->
@@ -99,11 +100,18 @@
     <section
       id="game"
       class="game"
+      data-scene="meadow"
       tabindex="-1"
       aria-label="Flower meadow. Bees are buttons: press Tab to move between bees and Enter to catch one."
     >
       <!-- Background layers (decorative). Stacked to give the scene depth -->
       <div class="scene" aria-hidden="true">
+        <!-- Only shown in some scenes: twinkling stars (night) and falling petals (blossom) -->
+        <div class="stars"></div>
+        <div class="falling-petals">
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
         <div class="sun"></div>
         <div class="cloud cloud--one"></div>
         <div class="cloud cloud--two"></div>

@@ -12,7 +12,8 @@ Built with plain **HTML, CSS and JavaScript**. There are no frameworks, no build
 2. **Click a bee** to catch it. Each bee adds one honey to your pot.
 3. Fill the pot (the target appears next to it) to finish the level. Each new level needs more bees, and the bees fly faster and sting more often.
 4. A bee that **turns red** is about to dive at your net. Catch it first or move your net away.
-5. Get stung **4 times** before your pot is full and the game is over.
+5. Each level takes place in a new scene: **Sunny Meadow → Golden Sunset → Lavender Fields → Moonlit Garden → Cherry Blossom**, then the cycle repeats.
+6. Get stung **4 times** before your pot is full and the game is over.
 
 **Phone / tablet:** tap a bee to catch it. Your net stays where you last tapped, and angry bees dive at that spot, so keep tapping around the meadow.
 
@@ -80,6 +81,9 @@ The scene is built from flat layers (sky, sun, drifting clouds, two hill layers 
 - Depth sets how low on the screen an object sits and how large it's drawn.
 - Each bee also has an **altitude**, which lifts it above a soft **shadow** on the ground. That shadow is what makes the bees look like they're flying above the meadow.
 - `z-index` follows depth, so nearer flowers and bees overlap farther ones.
+
+### Scenes per level
+The sky, sun, clouds, hills and grass only use colour tokens such as `--color-sky-top` and `--color-hill-front`. Each scene is a `.game[data-scene="…"]` rule in the CSS that gives those tokens new values. In `game.js`, the `SCENES` list holds each scene's name and flower colours. When a level starts, `applyScene()` sets `data-scene`, replants the flowers in the new colours and fades the new scene in. The night scene adds twinkling stars and a moon, and the blossom scene adds falling petals.
 
 ### JavaScript
 - **`game.js`** runs a `requestAnimationFrame` loop. Each bee moves through a simple set of states:
